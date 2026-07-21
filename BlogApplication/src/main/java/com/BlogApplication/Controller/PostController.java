@@ -1,7 +1,5 @@
 package com.BlogApplication.Controller;
 
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 import com.BlogApplication.model.Post;
 import com.BlogApplication.Service.PostService;
 import java.util.List;
@@ -12,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/posts")
+@CrossOrigin(origins = "http://localhost:5173") 
 public class PostController {
     
     @Autowired
