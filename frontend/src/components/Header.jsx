@@ -1,16 +1,12 @@
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { userDataContext } from "../context/UserContext.jsx";
-import { useContext, useState, useRef } from "react";
-import axios from "axios";
-import toast from "react-hot-toast";
+import { Link } from "react-router-dom";
+import {  useState} from "react";
+
 
 export default function Header() {
-  const { serverUrl } = useContext(userDataContext);
-  const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
 
-  const location = useLocation();
+  const [open, setOpen] = useState(false);
+  
+
 
   return (
     <header className="max-w-5xl mx-auto px-4 py-6">
