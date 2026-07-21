@@ -1,7 +1,22 @@
+import { Routes, Route } from "react-router-dom";
+import Layout from "./components/Layout";
+import IndexPage from "./pages/IndexPage";
+import CreatePost from "./pages/CreatePost";
+import EditPost from "./pages/EditPost";
+import { Toaster } from "react-hot-toast";
+
+
 function App() {
   return (
     <>
-      <h1 class="text-3xl font-bold underline">Hello world!</h1>
+      <Toaster />
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<IndexPage />} />
+          <Route path="/create-post" element={<CreatePost />} />
+          <Route path="/edit-post/:id" element={<EditPost />} />
+        </Route>
+      </Routes>
     </>
   );
 }
