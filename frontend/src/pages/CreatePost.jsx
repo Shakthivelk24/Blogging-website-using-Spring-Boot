@@ -1,14 +1,11 @@
-import { useContext,useState} from "react";
-import { userDataContext } from "../context/UserContext.jsx";
+import { useContext, useState } from "react";
+import { userDataContext } from "../context/DataContext";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
 function CreatePost() {
-  const {
-    serverUrl,
-    setPost,
-  } = useContext(userDataContext);
+  const { serverUrl, setPost } = useContext(userDataContext);
   const navigate = useNavigate();
 
   const [title, setTitle] = useState("");
@@ -16,9 +13,8 @@ function CreatePost() {
   const [author, setAuthor] = useState("");
   const [loading, setLoading] = useState(false);
 
-
   const handlePost = async () => {
-    if ( !title || !content || !author) {
+    if (!title || !content || !author) {
       toast.error("Please fill all fields");
       return;
     }
@@ -26,12 +22,11 @@ function CreatePost() {
     setLoading(true);
 
     try {
-      let formData = new FormData();
-      formData.append("title", title);
-      formData.append("content", content);
-      formData.append("author", author);
-
-      const res = await axios.post(serverUrl , formData);
+      const res = await axios.post(serverUrl, {
+        title,
+        content,
+        author,
+      });
 
       setPost(res.data);
 
@@ -42,7 +37,7 @@ function CreatePost() {
       toast.success("Post created successfully");
       setLoading(false);
 
-      navigate("/allpost");
+      navigate("/");
     } catch (err) {
       console.log("ERR :", err.message);
       toast.error("Error creating post");

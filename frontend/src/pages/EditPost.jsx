@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { userDataContext } from "../context/UserContext.jsx";
+import { userDataContext } from "../context/DataContext";
 import { useNavigate,useParams } from "react-router-dom";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -38,14 +38,14 @@ function EditPost() {
  const handleSave = async () => { 
       setLoading(true);
       try {
-      const formData = new FormData();
-      formData.append("title", title);
-      formData.append("content", content);
-      formData.append("author", author);
-      await axios.put(`${serverUrl}/${id}`, formData);
+      await axios.put(`${serverUrl}/${id}`, {
+        title,
+        content,
+        author
+      });
       setLoading(false);
       toast.success("Post updated successfully");
-      navigate("/allpost");
+      navigate("/");
       } catch (error) {
         console.log("Error updating post:", error.message);
         setLoading(false);
