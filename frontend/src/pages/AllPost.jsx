@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from "react";
-import { userDataContext } from "../context/UserContext";
+import { userDataContext } from "../context/DataContext";
 import axios from "axios";
 import Post from "../components/Post";
 
@@ -33,7 +33,7 @@ export default function AllPost() {
       ) : !posts || posts.length === 0 ? (
         <p className="no-posts text-center mt-2">No posts</p>
       ) : (
-        posts.map((post) => <Post key={post._id} Post={post} />)
+        posts.map((post) => <Post key={post.id} Post={post} setPost={setPosts} />)
       )}
     </>
   );
