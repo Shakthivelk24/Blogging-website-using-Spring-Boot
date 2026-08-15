@@ -1,6 +1,6 @@
 @Library('Shared')_
 
-pipeline{
+pipeline {
     agent {
         label 'shakthiAgent'
     }
@@ -41,6 +41,73 @@ pipeline{
         disableConcurrentBuilds()
     }
     stages {
-        
+        // ====================================================
+        // STAGE 1: CHECK TOOLS
+        // ====================================================
+        stage('Check Tools') {
+            steps {
+                cleanWs()
+                customLog('Checking required tools...')
+                check()
+            }
+        }
+        // ====================================================
+        // STAGE 2: CHECKOUT SOURCE CODE
+        // ====================================================
+        stage('🔄 Checkout') {
+            steps {
+                customLog('Checking out source code')
+
+                checkout scm
+
+                sh '''
+                echo "========== Last 5 Commits =========="
+                git log --oneline -5
+
+                echo "========== Git Status =========="
+                git status
+            '''
+            }
+        }
+        // ====================================================
+        // STAGE 3: INSTALL DEPENDENCIES
+        // ====================================================
+        stage('📦 Install Dependencies') {
+            stage('Frontend Dependencies') {
+                    steps {
+                        customLog('Installing frontend dependencies...')
+                        npmInstall('frontend')
+                    }
+            }
+        }
+        // ====================================================
+        // STAGE 4: RUN TESTS
+        // Execute unit and integration tests
+        // ====================================================
+        stage('🧪 Run Tests') {
+            parallel {
+                stage('Frontend Tests') {
+                    steps {
+                        npmTest(
+                         'frontend',
+                         'vitest',
+                         'coverage',
+                         'junit.xml'
+                        )
+                    }
+                }
+                stage('Backend Tests') {
+                    steps {
+                        dir('BlogApplication') {
+                            if( isUnix()) {
+                                sh 'mvn clean test'
+                            } else {
+                                bat 'mvn clean test'
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
