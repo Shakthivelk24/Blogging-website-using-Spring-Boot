@@ -120,7 +120,7 @@ describe("UserContext", () => {
 
     expect(
       screen.getByTestId("server-url")
-    ).toHaveTextContent("/api");
+    ).toHaveTextContent("/");
 
   });
 
@@ -182,7 +182,7 @@ describe("UserContext", () => {
     await waitFor(() => {
 
       expect(axios.get).toHaveBeenCalledWith(
-        "/api/api/user/current",
+        "///user/current",
         {
           withCredentials: true,
         }
