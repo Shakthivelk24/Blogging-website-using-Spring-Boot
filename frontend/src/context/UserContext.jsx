@@ -6,7 +6,7 @@ import axios from "axios";
 
 
 function UserContext({ children }) {
-  const serverUrl = "http://localhost:8083";
+  const serverUrl = import.meta.env.VITE_API_URL;
   const [post, setPost] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
