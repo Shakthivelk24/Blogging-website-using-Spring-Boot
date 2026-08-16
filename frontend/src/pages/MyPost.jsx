@@ -9,7 +9,9 @@ import {
 } from "../context/DataContext.jsx";
 
 import axios from "axios";
+
 import UserPost from "../components/UserPost";
+
 
 export default function MyPost() {
 
@@ -18,10 +20,25 @@ export default function MyPost() {
   } = useContext(userDataContext);
 
   const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
 
+  const [loading, setLoading] =
+    useState(true);
+
+
+  // ========================================
+  // FETCH USER POSTS
+  // ========================================
 
   useEffect(() => {
+
+    // No server URL
+    if (!serverUrl) {
+
+      setLoading(false);
+
+      return;
+    }
+
 
     const fetchUserPosts = async () => {
 
@@ -36,7 +53,11 @@ export default function MyPost() {
           }
         );
 
-        setPosts(res.data);
+        setPosts(
+          Array.isArray(res.data)
+            ? res.data
+            : []
+        );
 
       } catch (error) {
 
@@ -46,9 +67,12 @@ export default function MyPost() {
           error.message
         );
 
+        setPosts([]);
+
       } finally {
 
         setLoading(false);
+
       }
     };
 
@@ -58,6 +82,10 @@ export default function MyPost() {
   }, [serverUrl]);
 
 
+  // ========================================
+  // LOADING
+  // ========================================
+
   if (loading) {
 
     return (
@@ -65,10 +93,16 @@ export default function MyPost() {
         Loading...
       </p>
     );
+
   }
 
 
+  // ========================================
+  // POSTS
+  // ========================================
+
   return (
+
     <div className="p-5">
 
       {posts.length > 0 ? (
@@ -92,5 +126,6 @@ export default function MyPost() {
       )}
 
     </div>
+
   );
 }
