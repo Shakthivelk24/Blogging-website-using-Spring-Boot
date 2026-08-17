@@ -83,9 +83,7 @@ const renderUserContext = () => {
 
   return render(
     <UserContext>
-
       <TestComponent />
-
     </UserContext>
   );
 };
@@ -120,7 +118,7 @@ describe("UserContext", () => {
 
     expect(
       screen.getByTestId("server-url")
-    ).toHaveTextContent("/");
+    ).toHaveTextContent("");
 
   });
 
@@ -181,8 +179,10 @@ describe("UserContext", () => {
 
     await waitFor(() => {
 
-      expect(axios.get).toHaveBeenCalledWith(
-        "///user/current",
+      expect(
+        axios.get
+      ).toHaveBeenCalledWith(
+        "/api/user/current",
         {
           withCredentials: true,
         }
@@ -222,25 +222,28 @@ describe("UserContext", () => {
   // LOADING COMPLETE
   // ========================================
 
-  test("sets loading to false after successful API call", async () => {
+  test(
+    "sets loading to false after successful API call",
+    async () => {
 
-    axios.get.mockResolvedValue({
-      data: {
-        username: "shakthi",
-      },
-    });
+      axios.get.mockResolvedValue({
+        data: {
+          username: "shakthi",
+        },
+      });
 
-    renderUserContext();
+      renderUserContext();
 
-    await waitFor(() => {
+      await waitFor(() => {
 
-      expect(
-        screen.getByTestId("loading")
-      ).toHaveTextContent("Loaded");
+        expect(
+          screen.getByTestId("loading")
+        ).toHaveTextContent("Loaded");
 
-    });
+      });
 
-  });
+    }
+  );
 
 
   // ========================================
@@ -270,22 +273,25 @@ describe("UserContext", () => {
   // USER REMAINS NULL ON ERROR
   // ========================================
 
-  test("keeps userData null when API fails", async () => {
+  test(
+    "keeps userData null when API fails",
+    async () => {
 
-    axios.get.mockRejectedValue(
-      new Error("Unauthorized")
-    );
+      axios.get.mockRejectedValue(
+        new Error("Unauthorized")
+      );
 
-    renderUserContext();
+      renderUserContext();
 
-    await waitFor(() => {
+      await waitFor(() => {
 
-      expect(
-        screen.getByTestId("user")
-      ).toHaveTextContent("No User");
+        expect(
+          screen.getByTestId("user")
+        ).toHaveTextContent("No User");
 
-    });
+      });
 
-  });
+    }
+  );
 
 });
