@@ -1,6 +1,7 @@
 @Library('Shared') _
 
 pipeline {
+
     agent {
         label 'shakthiAgent'
     }
@@ -10,11 +11,20 @@ pipeline {
     // ============================================================
 
     environment {
+
+        // --------------------------------------------------------
         // Application
+        // --------------------------------------------------------
+
         APP_NAME = 'sparkNote'
+
         APP_VERSION = "1.0.${BUILD_NUMBER}"
 
+
+        // --------------------------------------------------------
         // Docker
+        // --------------------------------------------------------
+
         DOCKER_USERNAME = 'shakthivelk24'
 
         FRONTEND_IMAGE =
@@ -23,20 +33,32 @@ pipeline {
         BACKEND_IMAGE =
             "${DOCKER_USERNAME}/sparknote-backend"
 
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        IMAGE_TAG =
+            "${BUILD_NUMBER}"
 
+
+        // --------------------------------------------------------
         // SonarQube
+        // --------------------------------------------------------
+
         SONAR_PROJECT_KEY = 'sparkNote'
 
-        // Trivy reports
-        TRIVY_REPORT_DIR = 'reports/trivy'
+
+        // --------------------------------------------------------
+        // Trivy Reports
+        // --------------------------------------------------------
+
+        TRIVY_REPORT_DIR =
+            'reports/trivy'
     }
+
 
     // ============================================================
     // PIPELINE OPTIONS
     // ============================================================
 
     options {
+
         timestamps()
 
         ansiColor('xterm')
@@ -55,17 +77,22 @@ pipeline {
         disableConcurrentBuilds()
     }
 
+
     // ============================================================
     // STAGES
     // ============================================================
 
     stages {
+
+
         // ========================================================
         // STAGE 1: CHECK TOOLS
         // ========================================================
 
         stage('🔧 Check Tools') {
+
             steps {
+
                 cleanWs()
 
                 customLog(
@@ -76,66 +103,107 @@ pipeline {
             }
         }
 
+
         // ========================================================
         // STAGE 2: CHECKOUT
         // ========================================================
 
         stage('🔄 Checkout') {
+
             steps {
+
                 customLog(
                     'Checking out source code...'
                 )
 
                 checkout scm
 
-                sh '''
-                    echo "========== Last 5 Commits =========="
+                script {
 
-                    git log --oneline -5
+                    if (isUnix()) {
 
-                    echo "========== Git Status =========="
+                        sh '''
+                            echo "========== Last 5 Commits =========="
 
-                    git status
-                '''
+                            git log --oneline -5
+
+                            echo "========== Git Status =========="
+
+                            git status
+                        '''
+
+                    } else {
+
+                        bat '''
+                            echo ========== Last 5 Commits ==========
+
+                            git log --oneline -5
+
+                            echo ========== Git Status ==========
+
+                            git status
+                        '''
+                    }
+                }
             }
         }
+
 
         // ========================================================
         // STAGE 3: INSTALL DEPENDENCIES
         // ========================================================
 
         stage('📦 Install Dependencies') {
+
             parallel {
+
+
                 // ------------------------------------------------
                 // FRONTEND
                 // ------------------------------------------------
 
                 stage('Frontend Dependencies') {
+
                     steps {
+
                         customLog(
-                            'Installing frontend dependencies...'
+                            'Installing React dependencies...'
                         )
 
-                        npmInstall('frontend')
+                        npmInstall(
+                            'frontend'
+                        )
                     }
                 }
+
 
                 // ------------------------------------------------
                 // BACKEND
                 // ------------------------------------------------
 
                 stage('Backend Dependencies') {
+
                     steps {
+
                         dir('BlogApplication') {
+
                             customLog(
                                 'Installing Spring Boot dependencies...'
                             )
 
                             script {
+
                                 if (isUnix()) {
-                                    sh 'mvn dependency:go-offline'
+
+                                    sh '''
+                                        mvn dependency:go-offline
+                                    '''
+
                                 } else {
-                                    bat 'mvn dependency:go-offline'
+
+                                    bat '''
+                                        mvn dependency:go-offline
+                                    '''
                                 }
                             }
                         }
@@ -144,18 +212,24 @@ pipeline {
             }
         }
 
+
         // ========================================================
         // STAGE 4: RUN TESTS
         // ========================================================
 
         stage('🧪 Run Tests') {
+
             parallel {
+
+
                 // ------------------------------------------------
                 // FRONTEND TESTS
                 // ------------------------------------------------
 
                 stage('Frontend Tests') {
+
                     steps {
+
                         customLog(
                             'Running React tests with coverage...'
                         )
@@ -169,54 +243,90 @@ pipeline {
                     }
                 }
 
+
                 // ------------------------------------------------
-                // BACKEND TESTS
+                // SPRING BOOT TESTS
                 // ------------------------------------------------
 
-                stage('🧪 Backend Tests') {
+                stage('Backend Tests') {
+
                     steps {
+
                         dir('BlogApplication') {
+
                             withCredentials([
-                              file(
-                                  credentialsId: 'blogapplication-env',
-                                  variable: 'ENV_FILE'
-                              )
-                          ]) {
-                                if (isUnix()) {
-                                    sh '''
-                                    cp "$ENV_FILE" .env
-                                    mvn clean test
-                                   '''
-                            } else {
-                                    bat '''
-                                    copy /Y "%ENV_FILE%" ".env"
-                                    mvn clean test
-                                    '''
+                                file(
+                                    credentialsId:
+                                        'blogapplication-env',
+
+                                    variable:
+                                        'ENV_FILE'
+                                )
+                            ]) {
+
+                                script {
+
+                                    if (isUnix()) {
+
+                                        sh '''
+                                            echo "Creating Spring Boot .env file..."
+
+                                            cp "$ENV_FILE" .env
+
+                                            echo "Running Spring Boot tests..."
+
+                                            mvn clean test
+                                        '''
+
+                                    } else {
+
+                                        bat '''
+                                            echo Creating Spring Boot .env file...
+
+                                            copy /Y "%ENV_FILE%" ".env"
+
+                                            echo Running Spring Boot tests...
+
+                                            mvn clean test
+                                        '''
+                                    }
+                                }
                             }
-                          }
                         }
                     }
                 }
             }
         }
 
+
         // ========================================================
         // STAGE 5: STATIC CODE ANALYSIS
         // ========================================================
 
         stage('🔍 Static Code Analysis') {
+
             steps {
+
                 customLog(
-                    'Running SonarQube analysis...'
+                    'Running SonarQube analysis for React + Spring Boot...'
                 )
 
                 sonarqubeScan(
+
+                    // ------------------------------------------------
+                    // SonarQube
+                    // ------------------------------------------------
 
                     scannerName:
                         'SonarScanner',
 
                     sonarServer:
                         'SonarQube',
+
+
+                    // ------------------------------------------------
+                    // Project
+                    // ------------------------------------------------
 
                     projectKey:
                         SONAR_PROJECT_KEY,
@@ -227,15 +337,17 @@ pipeline {
                     projectVersion:
                         APP_VERSION,
 
+
                     // ------------------------------------------------
-                    // SOURCE DIRECTORIES
+                    // Source directories
                     // ------------------------------------------------
 
                     sources:
                         'frontend/src,BlogApplication/src',
 
+
                     // ------------------------------------------------
-                    // EXCLUSIONS
+                    // Exclusions
                     // ------------------------------------------------
 
                     exclusions: '''
@@ -248,18 +360,23 @@ pipeline {
                         **/*.test.js,
                         **/*.test.jsx,
                         **/*.spec.js,
-                        **/*.spec.jsx
-                    '''.trim().replaceAll('\\s+', ''),
+                        **/*.spec.jsx,
+                        **/src/test/**
+                    '''
+                    .trim()
+                    .replaceAll('\\s+', ''),
+
 
                     // ------------------------------------------------
-                    // REACT COVERAGE
+                    // React / JavaScript coverage
                     // ------------------------------------------------
 
                     jsCoverage:
                         'frontend/coverage/lcov.info',
 
+
                     // ------------------------------------------------
-                    // SPRING BOOT
+                    // Spring Boot / Java
                     // ------------------------------------------------
 
                     javaBinaries:
@@ -271,36 +388,47 @@ pipeline {
             }
         }
 
+
         // ========================================================
         // STAGE 6: QUALITY GATE
         // ========================================================
 
         stage('✅ Quality Gate') {
+
             steps {
-                customLog('Waiting for SonarQube quality gate result...')
+
+                customLog(
+                    'Waiting for SonarQube quality gate result...'
+                )
+
                 qualityGate()
             }
         }
     }
+
 
     // ============================================================
     // POST ACTIONS
     // ============================================================
 
     post {
+
         success {
+
             customLog(
-                '🎉 Pipeline completed successfully!'
+                '🎉 React + Spring Boot pipeline completed successfully!'
             )
         }
 
         failure {
+
             customLog(
                 '❌ Pipeline failed!'
             )
         }
 
         always {
+
             customLog(
                 'Pipeline execution completed.'
             )
