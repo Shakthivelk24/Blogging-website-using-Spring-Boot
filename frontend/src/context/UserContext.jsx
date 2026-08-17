@@ -6,7 +6,7 @@ import axios from "axios";
 
 
 function UserContext({ children }) {
-  const serverUrl = import.meta.env.VITE_API_URL;
+  const serverUrl = "";
   const [post, setPost] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
