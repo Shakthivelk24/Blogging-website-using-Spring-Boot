@@ -310,15 +310,10 @@ pipeline {
         // STAGE 6: QUALITY GATE
         // ========================================================
 
-        stage('✅ Quality Gate') {
-
+         stage('✅ Quality Gate') {
             steps {
-
-                customLog(
-                    'Checking SonarQube quality gate...'
-                )
-
-                waitForQualityGate()
+                customLog('Waiting for SonarQube quality gate result...')
+                qualityGate()
             }
         }
     }
