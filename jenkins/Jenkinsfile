@@ -99,7 +99,7 @@ pipeline {
                 stage('Backend Tests') {
                     steps {
                         dir('BlogApplication') {
-                            if( isUnix()) {
+                            if (isUnix()) {
                                 sh 'mvn clean test'
                             } else {
                                 bat 'mvn clean test'
@@ -107,6 +107,58 @@ pipeline {
                         }
                     }
                 }
+            }
+        }
+        // ====================================================
+        // STAGE 5: STATIC CODE ANALYSIS
+        // Run SonarQube analysis on the codebase
+        // ====================================================
+        stage('🔍 Static Code Analysis') {
+            steps {
+                customLog('Running SonarQube analysis...')
+                sonarqubeScan(
+                     scannerName: 'SonarScanner',
+                     sonarServer: 'SonarQube',
+                     projectKey: SONAR_PROJECT_KEY,
+                     projectName: APP_NAME,
+                     projectVersion: APP_VERSION,
+                     sources:
+                         'client/src,BlogApplication/src',
+
+                     exclusions: '''
+                         **/node_modules/**,
+                         **/dist/**,
+                         **/build/**,
+                         **/coverage/**,
+                         **/lcov-report/**,
+                         **/target/**,
+                         **/*.test.js,
+                         **/*.test.jsx,
+                         **/*.spec.js,
+                         **/*.spec.jsx
+                     '''.trim().replaceAll('\\s+', ''),
+
+                     // React
+                     jsCoverage:
+                         'client/coverage/lcov.info',
+
+                     // Spring Boot
+                     javaBinaries:
+                         'BlogApplication/target/classes',
+
+                     javaCoverage:
+        '                 BlogApplication/target/site/jacoco/jacoco.xml'
+                )
+            }
+        }
+        // ====================================================
+        // STAGE 6: QUALITY GATE
+        // Check if the SonarQube quality gate passed or failed
+        // ====================================================
+        stage('✅ Quality Gate') {
+            steps {
+                customLog('Checking SonarQube quality gate...')
+                waitForQualityGate()
             }
         }
     }
