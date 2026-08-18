@@ -1,6 +1,7 @@
 @Library('Shared') _
 
 pipeline {
+
     // ============================================================
     // AGENT
     // ============================================================
@@ -14,17 +15,12 @@ pipeline {
     // ============================================================
 
     environment {
-        // --------------------------------------------------------
-        // Application
-        // --------------------------------------------------------
 
+        // Application
         APP_NAME = 'sparkNote'
         APP_VERSION = "1.0.${BUILD_NUMBER}"
 
-        // --------------------------------------------------------
         // Docker
-        // --------------------------------------------------------
-
         DOCKER_USERNAME = 'shakthivelk24'
 
         FRONTEND_IMAGE =
@@ -36,16 +32,10 @@ pipeline {
         IMAGE_TAG =
             "${BUILD_NUMBER}"
 
-        // --------------------------------------------------------
         // SonarQube
-        // --------------------------------------------------------
-
         SONAR_PROJECT_KEY = 'sparkNote'
 
-        // --------------------------------------------------------
         // Trivy
-        // --------------------------------------------------------
-
         TRIVY_REPORT_DIR =
             'reports/trivy'
     }
@@ -55,6 +45,7 @@ pipeline {
     // ============================================================
 
     options {
+
         timestamps()
 
         ansiColor('xterm')
@@ -78,12 +69,15 @@ pipeline {
     // ============================================================
 
     stages {
+
         // ========================================================
         // STAGE 1: CHECK TOOLS
         // ========================================================
 
         stage('🔧 Check Tools') {
+
             steps {
+
                 cleanWs()
 
                 customLog(
@@ -99,7 +93,9 @@ pipeline {
         // ========================================================
 
         stage('🔄 Checkout') {
+
             steps {
+
                 customLog(
                     'Checking out source code...'
                 )
@@ -107,7 +103,9 @@ pipeline {
                 checkout scm
 
                 script {
+
                     if (isUnix()) {
+
                         sh '''
                             echo "========== Last 5 Commits =========="
 
@@ -117,7 +115,9 @@ pipeline {
 
                             git status
                         '''
+
                     } else {
+
                         bat '''
                             echo ========== Last 5 Commits ==========
 
@@ -137,13 +137,17 @@ pipeline {
         // ========================================================
 
         stage('📦 Install Dependencies') {
+
             parallel {
+
                 // ------------------------------------------------
                 // FRONTEND
                 // ------------------------------------------------
 
                 stage('Frontend Dependencies') {
+
                     steps {
+
                         customLog(
                             'Installing React dependencies...'
                         )
@@ -155,22 +159,29 @@ pipeline {
                 }
 
                 // ------------------------------------------------
-                // BACKEND
+                // SPRING BOOT
                 // ------------------------------------------------
 
                 stage('Backend Dependencies') {
+
                     steps {
+
                         dir('BlogApplication') {
+
                             customLog(
                                 'Installing Spring Boot dependencies...'
                             )
 
                             script {
+
                                 if (isUnix()) {
+
                                     sh '''
                                         mvn dependency:go-offline
                                     '''
+
                                 } else {
+
                                     bat '''
                                         mvn dependency:go-offline
                                     '''
@@ -187,13 +198,17 @@ pipeline {
         // ========================================================
 
         stage('🧪 Run Tests') {
+
             parallel {
+
                 // ------------------------------------------------
                 // FRONTEND TESTS
                 // ------------------------------------------------
 
                 stage('Frontend Tests') {
+
                     steps {
+
                         customLog(
                             'Running React tests with coverage...'
                         )
@@ -212,8 +227,11 @@ pipeline {
                 // ------------------------------------------------
 
                 stage('Backend Tests') {
+
                     steps {
+
                         dir('BlogApplication') {
+
                             withCredentials([
 
                                 file(
@@ -225,8 +243,11 @@ pipeline {
                                 )
 
                             ]) {
+
                                 script {
+
                                     if (isUnix()) {
+
                                         sh '''
                                             echo "Creating Spring Boot .env file..."
 
@@ -236,7 +257,9 @@ pipeline {
 
                                             mvn clean test
                                         '''
+
                                     } else {
+
                                         bat '''
                                             echo Creating Spring Boot .env file...
 
@@ -259,47 +282,50 @@ pipeline {
         // STAGE 5: STATIC CODE ANALYSIS
         // ========================================================
 
-       // ========================================================
-// STAGE 5: STATIC CODE ANALYSIS
-// ========================================================
-
         stage('🔍 Static Code Analysis') {
+
             steps {
+
                 customLog(
-            'Running SonarQube analysis for React + Spring Boot...'
-        )
+                    'Running SonarQube analysis for React + Spring Boot...'
+                )
 
                 script {
+
                     def scannerHome =
-                tool 'SonarScanner'
+                        tool 'SonarScanner'
 
                     withSonarQubeEnv('SonarQube') {
+
                         if (isUnix()) {
+
                             sh """
-                        "${scannerHome}/bin/sonar-scanner" \
-                        -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
-                        -Dsonar.projectName="${APP_NAME}" \
-                        -Dsonar.projectVersion="${APP_VERSION}" \
-                        -Dsonar.sources="frontend/src,BlogApplication/src" \
-                        -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx,**/src/test/**" \
-                        -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" \
-                        -Dsonar.java.binaries="BlogApplication/target/classes" \
-                        -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" \
-                        -Dsonar.verbose=true
-                    """
-                } else {
+                                "${scannerHome}/bin/sonar-scanner" \
+                                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+                                -Dsonar.projectName="${APP_NAME}" \
+                                -Dsonar.projectVersion="${APP_VERSION}" \
+                                -Dsonar.sources="frontend/src,BlogApplication/src" \
+                                -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx,**/src/test/**" \
+                                -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" \
+                                -Dsonar.java.binaries="BlogApplication/target/classes" \
+                                -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" \
+                                -Dsonar.verbose=true
+                            """
+
+                        } else {
+
                             bat """
-                        "${scannerHome}\\bin\\sonar-scanner.bat" ^
-                        -Dsonar.projectKey="${SONAR_PROJECT_KEY}" ^
-                        -Dsonar.projectName="${APP_NAME}" ^
-                        -Dsonar.projectVersion="${APP_VERSION}" ^
-                        -Dsonar.sources="frontend/src,BlogApplication/src" ^
-                        -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx,**/src/test/**" ^
-                        -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" ^
-                        -Dsonar.java.binaries="BlogApplication/target/classes" ^
-                        -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" ^
-                        -Dsonar.verbose=true
-                    """
+                                "${scannerHome}\\bin\\sonar-scanner.bat" ^
+                                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" ^
+                                -Dsonar.projectName="${APP_NAME}" ^
+                                -Dsonar.projectVersion="${APP_VERSION}" ^
+                                -Dsonar.sources="frontend/src,BlogApplication/src" ^
+                                -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx,**/src/test/**" ^
+                                -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" ^
+                                -Dsonar.java.binaries="BlogApplication/target/classes" ^
+                                -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" ^
+                                -Dsonar.verbose=true
+                            """
                         }
                     }
                 }
@@ -311,7 +337,9 @@ pipeline {
         // ========================================================
 
         stage('✅ Quality Gate') {
+
             steps {
+
                 customLog(
                     'Waiting for SonarQube quality gate result...'
                 )
@@ -319,110 +347,176 @@ pipeline {
                 qualityGate()
             }
         }
-    }
-    // ====================================================
-    // STAGE 7: BUILD APPLICATION
-    // Compile React frontend for production
-    // ====================================================
-    stage('🏗️ Build Application') {
-        stage('Build Frontend') {
+
+        // ========================================================
+        // STAGE 7: BUILD APPLICATION
+        // ========================================================
+
+        stage('🏗️ Build Application') {
+
+            steps {
+
+                customLog(
+                    'Building React frontend...'
+                )
+
+                frontendBuild(
+                    'frontend'
+                )
+            }
+        }
+
+        // ========================================================
+        // STAGE 8: DOCKER LOGIN
+        // ========================================================
+
+        stage('🔑 Docker Login') {
+
+            steps {
+
+                customLog(
+                    'Logging in to Docker Hub...'
+                )
+
+                dockerLogin()
+            }
+        }
+
+        // ========================================================
+        // STAGE 9: BUILD DOCKER IMAGES
+        // ========================================================
+
+        stage('🐳 Build Docker Images') {
+
+            parallel {
+
+                // ------------------------------------------------
+                // FRONTEND IMAGE
+                // ------------------------------------------------
+
+                stage('Build Frontend Image') {
+
                     steps {
-                        customLog('Building frontend...')
-                        frontendBuild('client')
+
+                        customLog(
+                            'Building frontend Docker image...'
+                        )
+
+                        dockerBuild(
+                            FRONTEND_IMAGE,
+                            'docker/frontend/Dockerfile',
+                            '.',
+                            IMAGE_TAG
+                        )
                     }
+                }
+
+                // ------------------------------------------------
+                // BACKEND IMAGE
+                // ------------------------------------------------
+
+                stage('Build Backend Image') {
+
+                    steps {
+
+                        customLog(
+                            'Building backend Docker image...'
+                        )
+
+                        dockerBuild(
+                            BACKEND_IMAGE,
+                            'docker/backend/Dockerfile',
+                            '.',
+                            IMAGE_TAG
+                        )
+                    }
+                }
+            }
+        }
+
+        // ========================================================
+        // STAGE 10: TRIVY IMAGE SCAN
+        // ========================================================
+
+        stage('🛡️ Trivy Image Scan') {
+
+            parallel {
+
+                // ------------------------------------------------
+                // FRONTEND SCAN
+                // ------------------------------------------------
+
+                stage('Scan Frontend Image') {
+
+                    steps {
+
+                        trivyScan(
+
+                            imageName:
+                                FRONTEND_IMAGE,
+
+                            imageVersion:
+                                IMAGE_TAG,
+
+                            reportDir:
+                                TRIVY_REPORT_DIR,
+
+                            reportName:
+                                'frontend'
+                        )
+                    }
+                }
+
+                // ------------------------------------------------
+                // BACKEND SCAN
+                // ------------------------------------------------
+
+                stage('Scan Backend Image') {
+
+                    steps {
+
+                        trivyScan(
+
+                            imageName:
+                                BACKEND_IMAGE,
+
+                            imageVersion:
+                                IMAGE_TAG,
+
+                            reportDir:
+                                TRIVY_REPORT_DIR,
+
+                            reportName:
+                                'backend'
+                        )
+                    }
+                }
+            }
         }
     }
 
-     // ====================================================
-    // STAGE 8: DOCKER LOGIN
-    // Log in to Docker Hub to push images
-    // ====================================================
-    stage('🔑 Docker Login') {
-            steps {
-                customLog('Logging in to Docker Hub...')
-                dockerLogin()
-            }
-    }
-    // ====================================================
-    // STAGE 9: BUILD DOCKER IMAGES
-    // Build Docker images for frontend and backend
-    // ====================================================
-    stage('🐳 Build Docker Images') {
-            parallel {
-                stage('Build Frontend Image') {
-                    steps {
-                        customLog('Building frontend Docker image...')
-
-                        dockerBuild(
-                           FRONTEND_IMAGE,
-                           'docker/frontend/Dockerfile',
-                           '.',
-                           IMAGE_TAG
-                        )
-                    }
-                }
-
-                stage('Build Backend Image') {
-                    steps {
-                        customLog('Building backend Docker image...')
-
-                        dockerBuild(
-                          BACKEND_IMAGE,
-                          'docker/backend/Dockerfile',
-                          '.',
-                          IMAGE_TAG
-                        )
-                    }
-                }
-            }
-    }
-        // ====================================================
-        // STAGE 10: SCAN DOCKER IMAGES
-        // Scan Docker images for vulnerabilities using Trivy
-        // ====================================================
-        stage('🛡️ Trivy Image Scan') {
-            parallel {
-                stage('Scan Frontend Image') {
-                    steps {
-                        trivyScan(
-                          imageName: FRONTEND_IMAGE,
-                          imageVersion: IMAGE_TAG,
-                          reportDir: TRIVY_REPORT_DIR,
-                          reportName: 'frontend'
-                     )
-                    }
-                }
-
-                stage('Scan Backend Image') {
-                    steps {
-                        trivyScan(
-                          imageName: BACKEND_IMAGE,
-                          imageVersion: IMAGE_TAG,
-                          reportDir: TRIVY_REPORT_DIR,
-                          reportName: 'backend'
-                        )
-                    }
-                }
-             }
-            }
     // ============================================================
     // POST ACTIONS
     // ============================================================
 
     post {
+
         success {
+
             customLog(
                 '🎉 React + Spring Boot pipeline completed successfully!'
             )
         }
 
         failure {
+
             customLog(
                 '❌ Pipeline failed!'
             )
         }
 
         always {
+
             customLog(
                 'Pipeline execution completed.'
             )
