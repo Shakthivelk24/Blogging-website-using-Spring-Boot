@@ -78,7 +78,6 @@ pipeline {
     // ============================================================
 
     stages {
-
         // ========================================================
         // STAGE 1: CHECK TOOLS
         // ========================================================
@@ -139,7 +138,6 @@ pipeline {
 
         stage('📦 Install Dependencies') {
             parallel {
-
                 // ------------------------------------------------
                 // FRONTEND
                 // ------------------------------------------------
@@ -190,7 +188,6 @@ pipeline {
 
         stage('🧪 Run Tests') {
             parallel {
-
                 // ------------------------------------------------
                 // FRONTEND TESTS
                 // ------------------------------------------------
@@ -323,7 +320,91 @@ pipeline {
             }
         }
     }
+    // ====================================================
+    // STAGE 7: BUILD APPLICATION
+    // Compile React frontend for production
+    // ====================================================
+    stage('🏗️ Build Application') {
+        stage('Build Frontend') {
+                    steps {
+                        customLog('Building frontend...')
+                        frontendBuild('client')
+                    }
+        }
+    }
 
+     // ====================================================
+    // STAGE 8: DOCKER LOGIN
+    // Log in to Docker Hub to push images
+    // ====================================================
+    stage('🔑 Docker Login') {
+            steps {
+                customLog('Logging in to Docker Hub...')
+                dockerLogin()
+            }
+    }
+    // ====================================================
+    // STAGE 9: BUILD DOCKER IMAGES
+    // Build Docker images for frontend and backend
+    // ====================================================
+    stage('🐳 Build Docker Images') {
+            parallel {
+                stage('Build Frontend Image') {
+                    steps {
+                        customLog('Building frontend Docker image...')
+
+                        dockerBuild(
+                           FRONTEND_IMAGE,
+                           'docker/frontend/Dockerfile',
+                           '.',
+                           IMAGE_TAG
+                        )
+                    }
+                }
+
+                stage('Build Backend Image') {
+                    steps {
+                        customLog('Building backend Docker image...')
+
+                        dockerBuild(
+                          BACKEND_IMAGE,
+                          'docker/backend/Dockerfile',
+                          '.',
+                          IMAGE_TAG
+                        )
+                    }
+                }
+            }
+    }
+        // ====================================================
+        // STAGE 10: SCAN DOCKER IMAGES
+        // Scan Docker images for vulnerabilities using Trivy
+        // ====================================================
+        stage('🛡️ Trivy Image Scan') {
+            parallel {
+                stage('Scan Frontend Image') {
+                    steps {
+                        trivyScan(
+                          imageName: FRONTEND_IMAGE,
+                          imageVersion: IMAGE_TAG,
+                          reportDir: TRIVY_REPORT_DIR,
+                          reportName: 'frontend'
+                     )
+                    }
+                }
+
+                stage('Scan Backend Image') {
+                    steps {
+                        trivyScan(
+                          imageName: BACKEND_IMAGE,
+                          imageVersion: IMAGE_TAG,
+                          reportDir: TRIVY_REPORT_DIR,
+                          reportName: 'backend'
+                        )
+                    }
+                }
+             }
+            }
     // ============================================================
     // POST ACTIONS
     // ============================================================
