@@ -6,9 +6,8 @@ pipeline {
 
     options {
         timestamps()
+        timeout(time: 1, unit: 'HOURS')
         disableConcurrentBuilds()
-        skipDefaultCheckout(true)
-        timeout(time: 60, unit: 'MINUTES')
     }
 
     environment {
@@ -19,64 +18,47 @@ pipeline {
 
         APP_NAME = 'sparkNote'
 
-        // Jenkins build number used as image/version tag
-        APP_VERSION = "${BUILD_NUMBER}"
-
-        // ============================================================
-        // GITHUB
-        // ============================================================
-
-        GIT_URL = 'https://github.com/Shakthivelk24/Blogging-website-using-Spring-Boot.git'
-
-        // ============================================================
-        // SONARQUBE
-        // ============================================================
-
-        SONAR_PROJECT_KEY = 'sparkNote'
-
-        // Jenkins -> Manage Jenkins -> System -> SonarQube
-        SONAR_SERVER = 'SonarQube'
-
-        // Jenkins -> Tools -> SonarQube Scanner installations
-        SONAR_SCANNER = 'SonarScanner'
-
-        // ============================================================
-        // DOCKER
-        // ============================================================
-
-        DOCKERHUB_USERNAME = 'shakthivelk24'
-
-        FRONTEND_IMAGE =
-            "${DOCKERHUB_USERNAME}/sparknote-frontend"
-
-        BACKEND_IMAGE =
-            "${DOCKERHUB_USERNAME}/sparknote-backend"
-
-        // ============================================================
-        // PATHS
-        // ============================================================
+        APP_VERSION = "1.0.${BUILD_NUMBER}"
 
         FRONTEND_DIR = 'frontend'
 
         BACKEND_DIR = 'BlogApplication'
 
-        // ============================================================
-        // JAVA
-        // ============================================================
-
-        JAVA_HOME = 'C:\\Program Files\\Java\\jdk-25.0.2'
 
         // ============================================================
-        // NODE
+        // SONARQUBE
         // ============================================================
 
-        NODE_HOME = 'C:\\Program Files\\nodejs'
+        SONAR_SERVER = 'SonarQube'
 
-        PATH = "${JAVA_HOME}\\bin;${NODE_HOME};${PATH}"
+        SONAR_SCANNER = 'SonarScanner'
+
+        SONAR_PROJECT_KEY = 'sparkNote'
+
+
+        // ============================================================
+        // DOCKER
+        // ============================================================
+
+        DOCKER_USERNAME = 'shakthivelk24'
+
+        FRONTEND_IMAGE = 'shakthivelk24/sparknote-frontend'
+
+        BACKEND_IMAGE = 'shakthivelk24/sparknote-backend'
+
+        IMAGE_TAG = "${BUILD_NUMBER}"
+
+
+        // ============================================================
+        // TRIVY
+        // ============================================================
+
+        TRIVY_SEVERITY = 'HIGH,CRITICAL'
     }
 
 
     stages {
+
 
         // ============================================================
         // 1. CLEAN WORKSPACE
@@ -110,26 +92,28 @@ pipeline {
                 checkout([
                     $class: 'GitSCM',
 
-                    branches: [
-                        [
-                            name: '*/main'
-                        ]
-                    ],
+                    branches: [[
+                        name: '*/main'
+                    ]],
 
-                    userRemoteConfigs: [
-                        [
-                            url: "${GIT_URL}"
-                        ]
-                    ]
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/Shakthivelk24/Blogging-website-using-Spring-Boot.git'
+                    ]]
                 ])
 
+
                 bat '''
+                    echo.
                     echo ========================================
                     echo Git Information
                     echo ========================================
 
                     git --version
+
+                    echo.
                     git branch
+
+                    echo.
                     git log -1 --oneline
 
                     echo.
@@ -176,6 +160,10 @@ pipeline {
                     echo.
                     echo ---------- Trivy ----------
                     trivy --version
+
+                    echo.
+                    echo ---------- Git ----------
+                    git --version
                 '''
             }
         }
@@ -252,15 +240,20 @@ pipeline {
 
                         npm run build
 
-                        echo.
-                        echo Checking build output...
+                        if %ERRORLEVEL% NEQ 0 (
+                            echo Frontend build failed.
+                            exit /b %ERRORLEVEL%
+                        )
 
-                        if exist dist (
-                            dir dist
-                        ) else (
-                            echo ERROR: dist directory was not created
+                        echo.
+                        echo Frontend build completed successfully.
+
+                        if not exist dist (
+                            echo ERROR: dist directory was not created.
                             exit /b 1
                         )
+
+                        dir dist
                     '''
                 }
             }
@@ -268,19 +261,7 @@ pipeline {
 
 
         // ============================================================
-        // 7. BACKEND TEST + COMPILE + PACKAGE
-        // ============================================================
-        //
-        // IMPORTANT:
-        //
-        // This stage MUST execute BEFORE SonarQube.
-        //
-        // SonarQube requires:
-        //
-        // BlogApplication/target/classes
-        //
-        // for Java analysis.
-        //
+        // 7. BACKEND TEST & BUILD
         // ============================================================
 
         stage('Backend Test & Build') {
@@ -307,12 +288,22 @@ pipeline {
 
                             copy /Y "%ENV_FILE%" ".env"
 
+                            if %ERRORLEVEL% NEQ 0 (
+                                echo Failed to create .env file.
+                                exit /b %ERRORLEVEL%
+                            )
+
                             echo.
                             echo ========================================
                             echo Maven Clean
                             echo ========================================
 
                             mvn clean
+
+                            if %ERRORLEVEL% NEQ 0 (
+                                echo Maven clean failed.
+                                exit /b %ERRORLEVEL%
+                            )
 
                             echo.
                             echo ========================================
@@ -322,7 +313,7 @@ pipeline {
                             mvn test
 
                             if %ERRORLEVEL% NEQ 0 (
-                                echo Backend tests failed
+                                echo Backend tests failed.
                                 exit /b %ERRORLEVEL%
                             )
 
@@ -334,7 +325,7 @@ pipeline {
                             mvn package -DskipTests
 
                             if %ERRORLEVEL% NEQ 0 (
-                                echo Maven package failed
+                                echo Maven package failed.
                                 exit /b %ERRORLEVEL%
                             )
 
@@ -344,16 +335,17 @@ pipeline {
                             echo ========================================
 
                             if not exist "target\\classes" (
-                                echo ERROR: target/classes does not exist
-                                echo SonarQube cannot analyze Java code
+                                echo ERROR: target/classes was not created.
                                 exit /b 1
                             )
+
+                            echo Java compiled classes found:
 
                             dir "target\\classes"
 
                             echo.
                             echo ========================================
-                            echo Backend JAR
+                            echo Checking JAR
                             echo ========================================
 
                             dir "target\\*.jar"
@@ -365,38 +357,42 @@ pipeline {
 
 
         // ============================================================
-        // 8. JACOCO COVERAGE
+        // 8. JACOCO CHECK
+        // ============================================================
+        //
+        // IMPORTANT:
+        // We DO NOT run:
+        //
+        //     mvn jacoco:report
+        //
+        // because the current project does not have the JaCoCo
+        // Maven plugin available.
+        //
+        // Instead, we only check whether a report exists.
+        //
         // ============================================================
 
-        stage('Generate JaCoCo Report') {
+        stage('JaCoCo Coverage Check') {
 
             steps {
 
                 echo '========================================'
-                echo 'Generating JaCoCo Coverage Report'
+                echo 'Checking JaCoCo Coverage'
                 echo '========================================'
 
                 dir("${BACKEND_DIR}") {
 
                     bat '''
-                        echo Generating JaCoCo report...
-
-                        mvn jacoco:report
-
-                        echo.
-                        echo Checking JaCoCo output...
+                        echo Checking for JaCoCo report...
 
                         if exist "target\\site\\jacoco\\jacoco.xml" (
 
                             echo JaCoCo XML report found.
 
-                            dir "target\\site\\jacoco"
-
                         ) else (
 
-                            echo WARNING:
-                            echo JaCoCo XML report was not generated.
-
+                            echo JaCoCo XML report not found.
+                            echo Continuing without coverage data.
                         )
                     '''
                 }
@@ -418,9 +414,10 @@ pipeline {
 
                 script {
 
-                    def scannerHome =
-                        tool name: "${SONAR_SCANNER}",
+                    def scannerHome = tool(
+                        name: "${SONAR_SCANNER}",
                         type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                    )
 
                     withSonarQubeEnv("${SONAR_SERVER}") {
 
@@ -435,9 +432,6 @@ pipeline {
                                 -Dsonar.projectVersion=${APP_VERSION} ^
                                 -Dsonar.sources=frontend/src,BlogApplication/src ^
                                 -Dsonar.java.binaries=BlogApplication/target/classes ^
-                                -Dsonar.java.libraries=BlogApplication/target/*.jar ^
-                                -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info ^
-                                -Dsonar.coverage.jacoco.xmlReportPaths=BlogApplication/target/site/jacoco/jacoco.xml ^
                                 -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx,**/src/test/** ^
                                 -Dsonar.verbose=false
                         """
@@ -483,10 +477,14 @@ pipeline {
 
                 bat """
                     docker build ^
-                        -t ${FRONTEND_IMAGE}:${APP_VERSION} ^
+                        -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ^
                         -t ${FRONTEND_IMAGE}:latest ^
-                        -f frontend/Dockerfile ^
+                        -f docker/frontend/Dockerfile ^
                         frontend
+                """
+
+                bat """
+                    docker images ${FRONTEND_IMAGE}
                 """
             }
         }
@@ -506,17 +504,21 @@ pipeline {
 
                 bat """
                     docker build ^
-                        -t ${BACKEND_IMAGE}:${APP_VERSION} ^
+                        -t ${BACKEND_IMAGE}:${IMAGE_TAG} ^
                         -t ${BACKEND_IMAGE}:latest ^
-                        -f BlogApplication/Dockerfile ^
+                        -f docker/backend/Dockerfile ^
                         BlogApplication
+                """
+
+                bat """
+                    docker images ${BACKEND_IMAGE}
                 """
             }
         }
 
 
         // ============================================================
-        // 13. TRIVY FRONTEND SCAN
+        // 13. TRIVY SCAN - FRONTEND
         // ============================================================
 
         stage('Trivy Scan - Frontend') {
@@ -524,21 +526,21 @@ pipeline {
             steps {
 
                 echo '========================================'
-                echo 'Trivy Frontend Image Scan'
+                echo 'Scanning Frontend Docker Image'
                 echo '========================================'
 
                 bat """
                     trivy image ^
-                        --severity HIGH,CRITICAL ^
-                        --ignore-unfixed ^
-                        ${FRONTEND_IMAGE}:${APP_VERSION}
+                        --severity ${TRIVY_SEVERITY} ^
+                        --exit-code 0 ^
+                        ${FRONTEND_IMAGE}:${IMAGE_TAG}
                 """
             }
         }
 
 
         // ============================================================
-        // 14. TRIVY BACKEND SCAN
+        // 14. TRIVY SCAN - BACKEND
         // ============================================================
 
         stage('Trivy Scan - Backend') {
@@ -546,14 +548,14 @@ pipeline {
             steps {
 
                 echo '========================================'
-                echo 'Trivy Backend Image Scan'
+                echo 'Scanning Backend Docker Image'
                 echo '========================================'
 
                 bat """
                     trivy image ^
-                        --severity HIGH,CRITICAL ^
-                        --ignore-unfixed ^
-                        ${BACKEND_IMAGE}:${APP_VERSION}
+                        --severity ${TRIVY_SEVERITY} ^
+                        --exit-code 0 ^
+                        ${BACKEND_IMAGE}:${IMAGE_TAG}
                 """
             }
         }
@@ -568,19 +570,24 @@ pipeline {
             steps {
 
                 echo '========================================'
-                echo 'Logging in to Docker Hub'
+                echo 'Logging into Docker Hub'
                 echo '========================================'
 
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKER_USERNAME',
+                        usernameVariable: 'DOCKER_USER',
                         passwordVariable: 'DOCKER_PASSWORD'
                     )
                 ]) {
 
                     bat '''
-                        echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
+                        echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USER% --password-stdin
+
+                        if %ERRORLEVEL% NEQ 0 (
+                            echo Docker login failed.
+                            exit /b %ERRORLEVEL%
+                        )
                     '''
                 }
             }
@@ -596,11 +603,16 @@ pipeline {
             steps {
 
                 echo '========================================'
-                echo 'Pushing Frontend Image'
+                echo 'Pushing Frontend Docker Image'
                 echo '========================================'
 
                 bat """
-                    docker push ${FRONTEND_IMAGE}:${APP_VERSION}
+                    docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
+
+                    if %ERRORLEVEL% NEQ 0 (
+                        exit /b %ERRORLEVEL%
+                    )
+
                     docker push ${FRONTEND_IMAGE}:latest
                 """
             }
@@ -616,11 +628,16 @@ pipeline {
             steps {
 
                 echo '========================================'
-                echo 'Pushing Backend Image'
+                echo 'Pushing Backend Docker Image'
                 echo '========================================'
 
                 bat """
-                    docker push ${BACKEND_IMAGE}:${APP_VERSION}
+                    docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
+
+                    if %ERRORLEVEL% NEQ 0 (
+                        exit /b %ERRORLEVEL%
+                    )
+
                     docker push ${BACKEND_IMAGE}:latest
                 """
             }
@@ -628,7 +645,7 @@ pipeline {
 
 
         // ============================================================
-        // 18. IMAGE SUMMARY
+        // 18. DOCKER IMAGE SUMMARY
         // ============================================================
 
         stage('Docker Image Summary') {
@@ -636,23 +653,72 @@ pipeline {
             steps {
 
                 echo '========================================'
-                echo 'Docker Images'
+                echo 'Docker Image Summary'
                 echo '========================================'
 
                 bat """
-                    docker images ${FRONTEND_IMAGE}
-                    docker images ${BACKEND_IMAGE}
+                    echo.
+                    echo ========================================
+                    echo FRONTEND IMAGE
+                    echo ========================================
+
+                    echo ${FRONTEND_IMAGE}:${IMAGE_TAG}
+
+                    docker image inspect ${FRONTEND_IMAGE}:${IMAGE_TAG} --format="{{.Id}}"
+
+                    echo.
+                    echo ========================================
+                    echo BACKEND IMAGE
+                    echo ========================================
+
+                    echo ${BACKEND_IMAGE}:${IMAGE_TAG}
+
+                    docker image inspect ${BACKEND_IMAGE}:${IMAGE_TAG} --format="{{.Id}}"
+
+                    echo.
+                    echo ========================================
+                    echo BUILD NUMBER
+                    echo ========================================
+
+                    echo ${BUILD_NUMBER}
+
+                    echo.
+                    echo ========================================
+                    echo IMAGE TAG
+                    echo ========================================
+
+                    echo ${IMAGE_TAG}
                 """
             }
         }
     }
 
 
-    // =================================================================
+    // ================================================================
     // POST ACTIONS
-    // =================================================================
+    // ================================================================
 
     post {
+
+        always {
+
+            echo '========================================'
+            echo 'Cleaning Sensitive Files'
+            echo '========================================'
+
+            bat '''
+                if exist "BlogApplication\\.env" (
+                    del /F /Q "BlogApplication\\.env"
+                )
+
+                if exist "frontend\\.env" (
+                    del /F /Q "frontend\\.env"
+                )
+            '''
+
+            echo 'Pipeline execution completed.'
+        }
+
 
         success {
 
@@ -664,15 +730,10 @@ pipeline {
 
             echo "Application : ${APP_NAME}"
             echo "Version     : ${APP_VERSION}"
+            echo "Build       : ${BUILD_NUMBER}"
 
-            echo "Frontend    : ${FRONTEND_IMAGE}:${APP_VERSION}"
-            echo "Backend     : ${BACKEND_IMAGE}:${APP_VERSION}"
-
-            echo '''
-            ========================================
-            All pipeline stages completed.
-            ========================================
-            '''
+            echo "Frontend    : ${FRONTEND_IMAGE}:${IMAGE_TAG}"
+            echo "Backend     : ${BACKEND_IMAGE}:${IMAGE_TAG}"
         }
 
 
@@ -689,19 +750,15 @@ pipeline {
         }
 
 
-        always {
+        unstable {
 
-            echo '========================================'
-            echo 'Cleaning Sensitive Files'
-            echo '========================================'
-
-            bat '''
-                if exist "BlogApplication\\.env" (
-                    del /F /Q "BlogApplication\\.env"
-                )
+            echo '''
+            ========================================
+            PIPELINE UNSTABLE
+            ========================================
             '''
 
-            echo 'Pipeline execution completed.'
+            echo "Build Number: ${BUILD_NUMBER}"
         }
     }
 }
