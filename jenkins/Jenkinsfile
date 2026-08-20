@@ -19,14 +19,16 @@ pipeline {
         // Docker
         DOCKER_USERNAME = 'shakthivelk24'
 
-        FRONTEND_IMAGE = "${DOCKER_USERNAME}/sparknote-frontend"
-        BACKEND_IMAGE  = "${DOCKER_USERNAME}/sparknote-backend"
+        FRONTEND_IMAGE =
+            "${DOCKER_USERNAME}/sparknote-frontend"
+
+        BACKEND_IMAGE =
+            "${DOCKER_USERNAME}/sparknote-backend"
 
         IMAGE_TAG = "${BUILD_NUMBER}"
 
         // SonarQube
-        SONAR_PROJECT_KEY  = 'sparkNote'
-        SONAR_PROJECT_NAME = 'sparkNote'
+        SONAR_PROJECT_KEY = 'sparkNote'
 
         // Trivy
         TRIVY_REPORT_DIR = 'reports/trivy'
@@ -80,6 +82,7 @@ pipeline {
             }
         }
 
+
         // ========================================================
         // 2. CHECKOUT
         // ========================================================
@@ -99,18 +102,16 @@ pipeline {
                     echo Git Information
                     echo ========================================
 
-                    git --version
-
-                    echo.
-                    echo Last 5 Commits
                     git log --oneline -5
 
                     echo.
-                    echo Git Status
+                    echo Current Git Status
+
                     git status
                 '''
             }
         }
+
 
         // ========================================================
         // 3. INSTALL DEPENDENCIES
@@ -129,12 +130,13 @@ pipeline {
                     steps {
 
                         customLog(
-                            'Installing frontend dependencies...'
+                            'Installing React dependencies...'
                         )
 
                         npmInstall('frontend')
                     }
                 }
+
 
                 // ------------------------------------------------
                 // BACKEND
@@ -150,160 +152,224 @@ pipeline {
                                 'Installing Spring Boot dependencies...'
                             )
 
-                            bat '''
-                                echo ========================================
-                                echo Maven Dependency Check
-                                echo ========================================
+                            withCredentials([
+                                file(
+                                    credentialsId: 'blogapplication-env',
+                                    variable: 'ENV_FILE'
+                                )
+                            ]) {
 
-                                mvn dependency:go-offline
-                            '''
+                                bat '''
+                                    echo ========================================
+                                    echo Creating Spring Boot environment file
+                                    echo ========================================
+
+                                    copy /Y "%ENV_FILE%" ".env"
+
+                                    echo.
+                                    echo Downloading Maven dependencies...
+
+                                    mvn dependency:go-offline
+                                '''
+                            }
                         }
                     }
                 }
             }
         }
 
+
         // ========================================================
-        // 4. FRONTEND TESTS + COVERAGE
+        // 4. RUN TESTS
         // ========================================================
 
-        stage('🧪 Frontend Tests & Coverage') {
+        stage('🧪 Run Tests') {
+
+            parallel {
+
+                // ------------------------------------------------
+                // FRONTEND TESTS
+                // ------------------------------------------------
+
+                stage('Frontend Tests') {
+
+                    steps {
+
+                        customLog(
+                            'Running React tests with coverage...'
+                        )
+
+                        npmTest(
+                            'frontend',
+                            'vitest',
+                            'coverage',
+                            'junit.xml'
+                        )
+                    }
+                }
+
+
+                // ------------------------------------------------
+                // BACKEND TESTS
+                // ------------------------------------------------
+
+                stage('Backend Tests') {
+
+                    steps {
+
+                        dir('BlogApplication') {
+
+                            customLog(
+                                'Running Spring Boot tests with JaCoCo coverage...'
+                            )
+
+                            withCredentials([
+                                file(
+                                    credentialsId: 'blogapplication-env',
+                                    variable: 'ENV_FILE'
+                                )
+                            ]) {
+
+                                bat '''
+                                    echo ========================================
+                                    echo Creating .env
+                                    echo ========================================
+
+                                    copy /Y "%ENV_FILE%" ".env"
+
+                                    echo.
+                                    echo ========================================
+                                    echo Running Maven tests
+                                    echo ========================================
+
+                                    mvn clean verify
+
+                                    echo.
+                                    echo ========================================
+                                    echo Checking compiled classes
+                                    echo ========================================
+
+                                    if not exist "target\\classes" (
+                                        echo ERROR: target\\classes was NOT created
+                                        exit /b 1
+                                    )
+
+                                    echo [OK] target\\classes exists
+
+                                    echo.
+                                    echo ========================================
+                                    echo Checking JaCoCo report
+                                    echo ========================================
+
+                                    if not exist "target\\site\\jacoco\\jacoco.xml" (
+                                        echo ERROR: JaCoCo XML report was NOT created
+                                        exit /b 1
+                                    )
+
+                                    echo [OK] JaCoCo XML report exists
+
+                                    echo.
+                                    echo ========================================
+                                    echo Backend tests completed successfully
+                                    echo ========================================
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+        // ========================================================
+        // 5. VERIFY COVERAGE FILES
+        // ========================================================
+
+        stage('🔎 Verify SonarQube Inputs') {
 
             steps {
 
-                dir('frontend') {
+                customLog(
+                    'Verifying SonarQube input files...'
+                )
 
-                    customLog(
-                        'Running React tests with coverage...'
+                bat '''
+                    echo ========================================
+                    echo SONARQUBE INPUT VERIFICATION
+                    echo ========================================
+
+                    echo.
+                    echo Workspace:
+                    cd
+
+                    echo.
+                    echo ========================================
+                    echo 1. Spring Boot Compiled Classes
+                    echo ========================================
+
+                    if exist "BlogApplication\\target\\classes" (
+
+                        echo [OK] BlogApplication\\target\\classes exists
+
+                        dir "BlogApplication\\target\\classes"
+
+                    ) else (
+
+                        echo [ERROR] BlogApplication\\target\\classes NOT FOUND
+
+                        exit /b 1
                     )
 
-                    bat '''
-                        echo ========================================
-                        echo Frontend Tests
-                        echo ========================================
 
-                        npm run coverage
-                    '''
+                    echo.
+                    echo ========================================
+                    echo 2. Spring Boot JaCoCo Report
+                    echo ========================================
 
-                    script {
+                    if exist "BlogApplication\\target\\site\\jacoco\\jacoco.xml" (
 
-                        if (fileExists('coverage/lcov.info')) {
+                        echo [OK] JaCoCo XML exists
 
-                            echo '''
-                            ====================
-                            Coverage report found:
-                            coverage/lcov.info
-                            ====================
-                            '''
+                        dir "BlogApplication\\target\\site\\jacoco"
 
-                        } else {
+                    ) else (
 
-                            error(
-                                'Frontend coverage file was not generated.'
-                            )
-                        }
-                    }
-                }
+                        echo [ERROR] JaCoCo XML NOT FOUND
+
+                        exit /b 1
+                    )
+
+
+                    echo.
+                    echo ========================================
+                    echo 3. React LCOV Report
+                    echo ========================================
+
+                    if exist "frontend\\coverage\\lcov.info" (
+
+                        echo [OK] React LCOV exists
+
+                        dir "frontend\\coverage"
+
+                    ) else (
+
+                        echo [ERROR] React LCOV NOT FOUND
+
+                        exit /b 1
+                    )
+
+
+                    echo.
+                    echo ========================================
+                    echo ALL SONARQUBE INPUTS ARE AVAILABLE
+                    echo ========================================
+                '''
             }
         }
 
-        // ========================================================
-        // 5. FRONTEND BUILD
-        // ========================================================
-
-        stage('🏗️ Frontend Build') {
-
-            steps {
-
-                customLog(
-                    'Building React application...'
-                )
-
-                dir('frontend') {
-
-                    bat '''
-                        echo ========================================
-                        echo React Production Build
-                        echo ========================================
-
-                        npm run build
-                    '''
-                }
-            }
-        }
 
         // ========================================================
-        // 6. BACKEND TEST + BUILD
-        // ========================================================
-
-        stage('🧪 Backend Test & Build') {
-
-            steps {
-
-                customLog(
-                    'Running Spring Boot tests and build...'
-                )
-
-                dir('BlogApplication') {
-
-                    withCredentials([
-                        file(
-                            credentialsId: 'blogapplication-env',
-                            variable: 'ENV_FILE'
-                        )
-                    ]) {
-
-                        bat '''
-                            echo ========================================
-                            echo Creating .env
-                            echo ========================================
-
-                            copy /Y "%ENV_FILE%" ".env"
-
-                            if %ERRORLEVEL% NEQ 0 (
-                                echo Failed to create .env
-                                exit /b 1
-                            )
-
-                            echo.
-                            echo ========================================
-                            echo Maven Clean
-                            echo ========================================
-
-                            mvn clean
-
-                            echo.
-                            echo ========================================
-                            echo Maven Test + Package
-                            echo ========================================
-
-                            mvn test package
-
-                            if %ERRORLEVEL% NEQ 0 (
-                                echo Backend tests/build failed
-                                exit /b 1
-                            )
-
-                            echo.
-                            echo ========================================
-                            echo Backend Build Completed
-                            echo ========================================
-
-                            if not exist "target\\classes" (
-                                echo ERROR: target/classes was not created.
-                                exit /b 1
-                            )
-
-                            echo Java classes found:
-                            dir "target\\classes"
-                        '''
-                    }
-                }
-            }
-        }
-
-        // ========================================================
-        // 7. SONARQUBE ANALYSIS
+        // 6. SONARQUBE ANALYSIS
         // ========================================================
 
         stage('🔍 SonarQube Analysis') {
@@ -311,7 +377,7 @@ pipeline {
             steps {
 
                 customLog(
-                    'Running SonarQube analysis...'
+                    'Running SonarQube analysis for React + Spring Boot...'
                 )
 
                 script {
@@ -322,48 +388,25 @@ pipeline {
                     withSonarQubeEnv('SonarQube') {
 
                         bat """
-                            echo ========================================
-                            echo SonarQube Analysis
-                            echo ========================================
-
-                            echo Scanner:
-                            echo ${scannerHome}
-
-                            echo.
-                            echo Project:
-                            echo ${SONAR_PROJECT_NAME}
-
-                            echo.
-                            echo Java binaries:
-                            echo BlogApplication/target/classes
-
-                            echo.
-                            echo React coverage:
-                            echo frontend/coverage/lcov.info
-
-                            echo.
-                            echo ========================================
-                            echo Running Scanner
-                            echo ========================================
-
-                            "${scannerHome}\\\\bin\\\\sonar-scanner.bat" ^
-                                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" ^
-                                -Dsonar.projectName="${SONAR_PROJECT_NAME}" ^
-                                -Dsonar.projectVersion="${APP_VERSION}" ^
-                                -Dsonar.sources="frontend/src,BlogApplication/src" ^
-                                -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/src/test/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx" ^
-                                -Dsonar.java.binaries="BlogApplication/target/classes" ^
-                                -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" ^
-                                -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" ^
-                                -Dsonar.scanner.skipSystemTruststore=true
+                            "${scannerHome}\\bin\\sonar-scanner.bat" ^
+                            -Dsonar.projectKey="${SONAR_PROJECT_KEY}" ^
+                            -Dsonar.projectName="${APP_NAME}" ^
+                            -Dsonar.projectVersion="${APP_VERSION}" ^
+                            -Dsonar.sources="frontend/src,BlogApplication/src" ^
+                            -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/src/test/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx" ^
+                            -Dsonar.java.binaries="BlogApplication/target/classes" ^
+                            -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" ^
+                            -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" ^
+                            -Dsonar.scanner.skipSystemTruststore=true
                         """
                     }
                 }
             }
         }
 
+
         // ========================================================
-        // 8. QUALITY GATE
+        // 7. QUALITY GATE
         // ========================================================
 
         stage('✅ Quality Gate') {
@@ -371,23 +414,27 @@ pipeline {
             steps {
 
                 customLog(
-                    'Waiting for SonarQube quality gate result...'
+                    'Waiting for SonarQube quality gate...'
                 )
 
-                timeout(
-                    time: 10,
-                    unit: 'MINUTES'
-                ) {
+                script {
 
-                    waitForQualityGate(
-                        abortPipeline: true
-                    )
+                    timeout(
+                        time: 5,
+                        unit: 'MINUTES'
+                    ) {
+
+                        waitForQualityGate(
+                            abortPipeline: true
+                        )
+                    }
                 }
             }
         }
 
+
         // ========================================================
-        // 9. VERIFY BUILD OUTPUTS
+        // 8. VERIFY BUILD OUTPUTS
         // ========================================================
 
         stage('🔎 Verify Build Outputs') {
@@ -395,41 +442,58 @@ pipeline {
             steps {
 
                 customLog(
-                    'Verifying generated application artifacts...'
+                    'Verifying application build outputs...'
                 )
 
                 bat '''
                     echo ========================================
-                    echo Frontend Build
+                    echo FINAL BUILD OUTPUT VERIFICATION
                     echo ========================================
-
-                    if not exist "frontend\\dist" (
-                        echo ERROR: Frontend dist folder not found.
-                        exit /b 1
-                    )
-
-                    dir "frontend\\dist"
 
                     echo.
-                    echo ========================================
-                    echo Backend Build
-                    echo ========================================
-
-                    if not exist "BlogApplication\\target" (
-                        echo ERROR: Backend target folder not found.
-                        exit /b 1
-                    )
+                    echo Spring Boot target directory:
 
                     dir "BlogApplication\\target"
 
                     echo.
+                    echo Spring Boot compiled classes:
+
+                    if exist "BlogApplication\\target\\classes" (
+                        echo [OK] Spring Boot classes available
+                    ) else (
+                        echo [ERROR] Spring Boot classes missing
+                        exit /b 1
+                    )
+
+                    echo.
+                    echo JaCoCo:
+
+                    if exist "BlogApplication\\target\\site\\jacoco\\jacoco.xml" (
+                        echo [OK] JaCoCo report available
+                    ) else (
+                        echo [ERROR] JaCoCo report missing
+                        exit /b 1
+                    )
+
+                    echo.
+                    echo React coverage:
+
+                    if exist "frontend\\coverage\\lcov.info" (
+                        echo [OK] React LCOV report available
+                    ) else (
+                        echo [ERROR] React LCOV report missing
+                        exit /b 1
+                    )
+
+                    echo.
                     echo ========================================
-                    echo Build Verification Successful
+                    echo BUILD OUTPUTS VERIFIED SUCCESSFULLY
                     echo ========================================
                 '''
             }
         }
     }
+
 
     // ============================================================
     // POST ACTIONS
@@ -439,27 +503,33 @@ pipeline {
 
         success {
 
-            customLog(
-                '🎉 Pipeline completed successfully!'
-            )
+            echo '''
+            ========================================
+               🎉 PIPELINE SUCCESS
+            ========================================
+            '''
         }
+
 
         failure {
 
-            customLog(
-                '❌ Pipeline failed!'
-            )
+            echo '''
+            ========================================
+               ❌ PIPELINE FAILED
+            ========================================
+            '''
         }
+
 
         always {
 
-            customLog(
-                'Pipeline execution completed.'
-            )
+            echo '''
+            ========================================
+               Pipeline execution completed.
+            ========================================
+            '''
 
-            // Remove generated .env file
-            // so secrets are not left inside workspace.
-
+            // Remove Jenkins workspace .env
             bat '''
                 if exist "BlogApplication\\.env" (
                     del /F /Q "BlogApplication\\.env"
