@@ -1,276 +1,255 @@
+@Library('Shared') _
+
 pipeline {
 
     agent {
         label 'shakthiAgent'
     }
 
-    options {
-        timestamps()
-        timeout(time: 1, unit: 'HOURS')
-        disableConcurrentBuilds()
-    }
-
     environment {
 
-        // ============================================================
+        // ========================================================
         // APPLICATION
-        // ============================================================
+        // ========================================================
 
         APP_NAME = 'sparkNote'
-
         APP_VERSION = "1.0.${BUILD_NUMBER}"
 
-        FRONTEND_DIR = 'frontend'
 
+        // ========================================================
+        // DIRECTORIES
+        // ========================================================
+
+        FRONTEND_DIR = 'frontend'
         BACKEND_DIR = 'BlogApplication'
 
 
-        // ============================================================
-        // SONARQUBE
-        // ============================================================
-
-        SONAR_SERVER = 'SonarQube'
-
-        SONAR_SCANNER = 'SonarScanner'
-
-        SONAR_PROJECT_KEY = 'sparkNote'
-
-
-        // ============================================================
+        // ========================================================
         // DOCKER
-        // ============================================================
+        // ========================================================
 
         DOCKER_USERNAME = 'shakthivelk24'
 
-        FRONTEND_IMAGE = 'shakthivelk24/sparknote-frontend'
-
-        BACKEND_IMAGE = 'shakthivelk24/sparknote-backend'
+        FRONTEND_IMAGE = "${DOCKER_USERNAME}/sparknote-frontend"
+        BACKEND_IMAGE = "${DOCKER_USERNAME}/sparknote-backend"
 
         IMAGE_TAG = "${BUILD_NUMBER}"
 
 
-        // ============================================================
-        // TRIVY
-        // ============================================================
+        // ========================================================
+        // SONARQUBE
+        // ========================================================
 
-        TRIVY_SEVERITY = 'HIGH,CRITICAL'
+        SONAR_PROJECT_KEY = 'sparkNote'
+
+
+        // ========================================================
+        // TRIVY
+        // ========================================================
+
+        TRIVY_REPORT_DIR = 'reports/trivy'
     }
 
+
+    // ============================================================
+    // OPTIONS
+    // ============================================================
+
+    options {
+
+        timestamps()
+
+        ansiColor('xterm')
+
+        timeout(
+            time: 60,
+            unit: 'MINUTES'
+        )
+
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '10'
+            )
+        )
+
+        disableConcurrentBuilds()
+    }
+
+
+    // ============================================================
+    // STAGES
+    // ============================================================
 
     stages {
 
 
-        // ============================================================
-        // 1. CLEAN WORKSPACE
-        // ============================================================
+        // ========================================================
+        // 1. CHECK TOOLS
+        // ========================================================
 
-        stage('Clean Workspace') {
+        stage('🔧 Check Tools') {
 
             steps {
 
-                echo '========================================'
-                echo 'Cleaning Jenkins Workspace'
-                echo '========================================'
-
                 cleanWs()
+
+                customLog(
+                    'Checking required tools...'
+                )
+
+                check()
             }
         }
 
 
-        // ============================================================
+        // ========================================================
         // 2. CHECKOUT
-        // ============================================================
+        // ========================================================
 
-        stage('Checkout') {
+        stage('🔄 Checkout') {
 
             steps {
 
-                echo '========================================'
-                echo 'Checking Out Source Code'
-                echo '========================================'
+                customLog(
+                    'Checking out source code...'
+                )
 
-                checkout([
-                    $class: 'GitSCM',
-
-                    branches: [[
-                        name: '*/main'
-                    ]],
-
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/Shakthivelk24/Blogging-website-using-Spring-Boot.git'
-                    ]]
-                ])
-
+                checkout scm
 
                 bat '''
-                    echo.
                     echo ========================================
                     echo Git Information
                     echo ========================================
 
-                    git --version
+                    git log --oneline -5
 
                     echo.
-                    git branch
 
-                    echo.
-                    git log -1 --oneline
-
-                    echo.
-                    echo Repository files:
-                    dir
+                    git status
                 '''
             }
         }
 
 
-        // ============================================================
-        // 3. ENVIRONMENT CHECK
-        // ============================================================
+        // ========================================================
+        // 3. INSTALL DEPENDENCIES
+        // ========================================================
 
-        stage('Environment Check') {
+        stage('📦 Install Dependencies') {
 
-            steps {
+            parallel {
 
-                echo '========================================'
-                echo 'Checking Build Environment'
-                echo '========================================'
+                stage('Frontend Dependencies') {
 
-                bat '''
-                    echo.
-                    echo ---------- Java ----------
-                    java -version
+                    steps {
 
-                    echo.
-                    echo ---------- Maven ----------
-                    mvn -version
-
-                    echo.
-                    echo ---------- Node ----------
-                    node --version
-
-                    echo.
-                    echo ---------- NPM ----------
-                    npm --version
-
-                    echo.
-                    echo ---------- Docker ----------
-                    docker --version
-
-                    echo.
-                    echo ---------- Trivy ----------
-                    trivy --version
-
-                    echo.
-                    echo ---------- Git ----------
-                    git --version
-                '''
-            }
-        }
-
-
-        // ============================================================
-        // 4. FRONTEND DEPENDENCIES
-        // ============================================================
-
-        stage('Frontend Dependencies') {
-
-            steps {
-
-                echo '========================================'
-                echo 'Installing Frontend Dependencies'
-                echo '========================================'
-
-                dir("${FRONTEND_DIR}") {
-
-                    bat '''
-                        echo Installing npm dependencies...
-
-                        if exist package-lock.json (
-                            npm ci
-                        ) else (
-                            npm install
+                        customLog(
+                            'Installing React dependencies...'
                         )
-                    '''
+
+                        npmInstall(
+                            'frontend'
+                        )
+                    }
+                }
+
+
+                stage('Backend Dependencies') {
+
+                    steps {
+
+                        dir("${BACKEND_DIR}") {
+
+                            customLog(
+                                'Installing Spring Boot dependencies...'
+                            )
+
+                            bat '''
+                                mvn dependency:go-offline
+
+                                if %ERRORLEVEL% NEQ 0 (
+                                    echo Maven dependency installation failed.
+                                    exit /b %ERRORLEVEL%
+                                )
+                            '''
+                        }
+                    }
                 }
             }
         }
 
 
-        // ============================================================
-        // 5. FRONTEND TEST
-        // ============================================================
+        // ========================================================
+        // 4. FRONTEND TEST
+        // ========================================================
 
-        stage('Frontend Test') {
+        stage('🧪 Frontend Tests') {
 
             steps {
 
-                echo '========================================'
-                echo 'Running Frontend Tests'
-                echo '========================================'
+                customLog(
+                    'Running React tests with coverage...'
+                )
 
-                dir("${FRONTEND_DIR}") {
-
-                    bat '''
-                        echo Checking frontend project...
-
-                        npm run test --if-present
-                    '''
-                }
+                npmTest(
+                    'frontend',
+                    'vitest',
+                    'coverage',
+                    'junit.xml'
+                )
             }
         }
 
 
-        // ============================================================
-        // 6. FRONTEND BUILD
-        // ============================================================
+        // ========================================================
+        // 5. FRONTEND BUILD
+        // ========================================================
 
-        stage('Frontend Build') {
+        stage('🏗️ Frontend Build') {
 
             steps {
 
-                echo '========================================'
-                echo 'Building React Frontend'
-                echo '========================================'
+                customLog(
+                    'Building React application...'
+                )
 
                 dir("${FRONTEND_DIR}") {
 
                     bat '''
-                        echo Building React application...
+                        echo ========================================
+                        echo React Production Build
+                        echo ========================================
 
                         npm run build
 
                         if %ERRORLEVEL% NEQ 0 (
-                            echo Frontend build failed.
+                            echo React build failed.
                             exit /b %ERRORLEVEL%
                         )
 
-                        echo.
-                        echo Frontend build completed successfully.
-
-                        if not exist dist (
+                        if not exist "dist" (
                             echo ERROR: dist directory was not created.
                             exit /b 1
                         )
 
-                        dir dist
+                        echo React build successful.
                     '''
                 }
             }
         }
 
 
-        // ============================================================
-        // 7. BACKEND TEST & BUILD
-        // ============================================================
+        // ========================================================
+        // 6. BACKEND TEST + BUILD
+        // ========================================================
 
-        stage('Backend Test & Build') {
+        stage('🧪 Backend Test & Build') {
 
             steps {
 
-                echo '========================================'
-                echo 'Backend Test & Build'
-                echo '========================================'
+                customLog(
+                    'Running Spring Boot tests and build...'
+                )
 
                 dir("${BACKEND_DIR}") {
 
@@ -283,15 +262,16 @@ pipeline {
 
                         bat '''
                             echo ========================================
-                            echo Creating backend .env
+                            echo Creating .env
                             echo ========================================
 
                             copy /Y "%ENV_FILE%" ".env"
 
                             if %ERRORLEVEL% NEQ 0 (
-                                echo Failed to create .env file.
+                                echo Failed to create .env
                                 exit /b %ERRORLEVEL%
                             )
+
 
                             echo.
                             echo ========================================
@@ -305,6 +285,7 @@ pipeline {
                                 exit /b %ERRORLEVEL%
                             )
 
+
                             echo.
                             echo ========================================
                             echo Maven Test
@@ -316,6 +297,7 @@ pipeline {
                                 echo Backend tests failed.
                                 exit /b %ERRORLEVEL%
                             )
+
 
                             echo.
                             echo ========================================
@@ -329,23 +311,23 @@ pipeline {
                                 exit /b %ERRORLEVEL%
                             )
 
+
                             echo.
                             echo ========================================
-                            echo Checking Compiled Classes
+                            echo Verify Java Classes
                             echo ========================================
 
                             if not exist "target\\classes" (
-                                echo ERROR: target/classes was not created.
+                                echo ERROR: target\\classes not found.
                                 exit /b 1
                             )
 
-                            echo Java compiled classes found:
+                            echo SUCCESS: target\\classes exists.
 
-                            dir "target\\classes"
 
                             echo.
                             echo ========================================
-                            echo Checking JAR
+                            echo Verify JAR
                             echo ========================================
 
                             dir "target\\*.jar"
@@ -356,84 +338,74 @@ pipeline {
         }
 
 
-        // ============================================================
-        // 8. JACOCO CHECK
-        // ============================================================
-        //
-        // IMPORTANT:
-        // We DO NOT run:
-        //
-        //     mvn jacoco:report
-        //
-        // because the current project does not have the JaCoCo
-        // Maven plugin available.
-        //
-        // Instead, we only check whether a report exists.
-        //
-        // ============================================================
+        // ========================================================
+        // 7. SONARQUBE ANALYSIS
+        // ========================================================
 
-        stage('JaCoCo Coverage Check') {
+        stage('🔍 SonarQube Analysis') {
 
             steps {
 
-                echo '========================================'
-                echo 'Checking JaCoCo Coverage'
-                echo '========================================'
-
-                dir("${BACKEND_DIR}") {
-
-                    bat '''
-                        echo Checking for JaCoCo report...
-
-                        if exist "target\\site\\jacoco\\jacoco.xml" (
-
-                            echo JaCoCo XML report found.
-
-                        ) else (
-
-                            echo JaCoCo XML report not found.
-                            echo Continuing without coverage data.
-                        )
-                    '''
-                }
-            }
-        }
-
-
-        // ============================================================
-        // 9. SONARQUBE ANALYSIS
-        // ============================================================
-
-        stage('SonarQube Analysis') {
-
-            steps {
-
-                echo '========================================'
-                echo 'Running SonarQube Analysis'
-                echo '========================================'
+                customLog(
+                    'Running SonarQube analysis...'
+                )
 
                 script {
 
-                    def scannerHome = tool(
-                        name: "${SONAR_SCANNER}",
-                        type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                    )
+                    def scannerHome =
+                        tool 'SonarScanner'
 
-                    withSonarQubeEnv("${SONAR_SERVER}") {
+
+                    withSonarQubeEnv('SonarQube') {
 
                         bat """
                             echo ========================================
-                            echo SonarQube Scanner
+                            echo SonarQube Analysis
                             echo ========================================
 
-                            "${scannerHome}\\\\bin\\\\sonar-scanner.bat" ^
-                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} ^
-                                -Dsonar.projectName=${APP_NAME} ^
-                                -Dsonar.projectVersion=${APP_VERSION} ^
-                                -Dsonar.sources=frontend/src,BlogApplication/src ^
-                                -Dsonar.java.binaries=BlogApplication/target/classes ^
-                                -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx,**/src/test/** ^
-                                -Dsonar.verbose=false
+                            echo Scanner:
+                            echo ${scannerHome}
+
+                            echo.
+                            echo Project:
+                            echo ${SONAR_PROJECT_KEY}
+
+                            echo.
+                            echo Java binaries:
+                            echo BlogApplication/target/classes
+
+                            echo.
+                            echo React coverage:
+                            echo frontend/coverage/lcov.info
+
+                            echo.
+                            echo ========================================
+                            echo Running Scanner
+                            echo ========================================
+
+                            "${scannerHome}\\bin\\sonar-scanner.bat" ^
+                                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" ^
+                                -Dsonar.projectName="${APP_NAME}" ^
+                                -Dsonar.projectVersion="${APP_VERSION}" ^
+                                -Dsonar.sources="frontend/src,BlogApplication/src" ^
+                                -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/src/test/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx" ^
+                                -Dsonar.java.binaries="BlogApplication/target/classes" ^
+                                -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" ^
+                                -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" ^
+                                -Dsonar.verbose=true
+
+                            if %ERRORLEVEL% NEQ 0 (
+                                echo.
+                                echo ========================================
+                                echo SonarQube Analysis FAILED
+                                echo ========================================
+                                exit /b %ERRORLEVEL%
+                            )
+
+                            echo.
+                            echo ========================================
+                            echo SonarQube Analysis Successful
+                            echo ========================================
                         """
                     }
                 }
@@ -441,19 +413,22 @@ pipeline {
         }
 
 
-        // ============================================================
-        // 10. SONARQUBE QUALITY GATE
-        // ============================================================
+        // ========================================================
+        // 8. QUALITY GATE
+        // ========================================================
 
-        stage('SonarQube Quality Gate') {
+        stage('✅ Quality Gate') {
 
             steps {
 
-                echo '========================================'
-                echo 'Waiting for SonarQube Quality Gate'
-                echo '========================================'
+                customLog(
+                    'Waiting for SonarQube quality gate...'
+                )
 
-                timeout(time: 10, unit: 'MINUTES') {
+                timeout(
+                    time: 10,
+                    unit: 'MINUTES'
+                ) {
 
                     waitForQualityGate(
                         abortPipeline: true
@@ -463,126 +438,142 @@ pipeline {
         }
 
 
-        // ============================================================
-        // 11. DOCKER BUILD - FRONTEND
-        // ============================================================
+        // ========================================================
+        // 9. DOCKER BUILD
+        // ========================================================
 
-        stage('Docker Build - Frontend') {
+        stage('🐳 Docker Build') {
 
-            steps {
+            parallel {
 
-                echo '========================================'
-                echo 'Building Frontend Docker Image'
-                echo '========================================'
+                stage('Frontend Docker Build') {
 
-                bat """
-                    docker build ^
-                        -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ^
-                        -t ${FRONTEND_IMAGE}:latest ^
-                        -f docker/frontend/Dockerfile ^
-                        frontend
-                """
+                    steps {
 
-                bat """
-                    docker images ${FRONTEND_IMAGE}
-                """
+                        customLog(
+                            'Building frontend Docker image...'
+                        )
+
+                        bat """
+                            docker build ^
+                                -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ^
+                                -t ${FRONTEND_IMAGE}:latest ^
+                                ${FRONTEND_DIR}
+
+                            if %ERRORLEVEL% NEQ 0 (
+                                echo Frontend Docker build failed.
+                                exit /b %ERRORLEVEL%
+                            )
+                        """
+                    }
+                }
+
+
+                stage('Backend Docker Build') {
+
+                    steps {
+
+                        customLog(
+                            'Building Spring Boot Docker image...'
+                        )
+
+                        bat """
+                            docker build ^
+                                -t ${BACKEND_IMAGE}:${IMAGE_TAG} ^
+                                -t ${BACKEND_IMAGE}:latest ^
+                                ${BACKEND_DIR}
+
+                            if %ERRORLEVEL% NEQ 0 (
+                                echo Backend Docker build failed.
+                                exit /b %ERRORLEVEL%
+                            )
+                        """
+                    }
+                }
             }
         }
 
 
-        // ============================================================
-        // 12. DOCKER BUILD - BACKEND
-        // ============================================================
+        // ========================================================
+        // 10. TRIVY SCAN
+        // ========================================================
 
-        stage('Docker Build - Backend') {
+        stage('🛡️ Trivy Image Scan') {
 
-            steps {
+            parallel {
 
-                echo '========================================'
-                echo 'Building Backend Docker Image'
-                echo '========================================'
+                stage('Frontend Trivy Scan') {
 
-                bat """
-                    docker build ^
-                        -t ${BACKEND_IMAGE}:${IMAGE_TAG} ^
-                        -t ${BACKEND_IMAGE}:latest ^
-                        -f docker/backend/Dockerfile ^
-                        BlogApplication
-                """
+                    steps {
 
-                bat """
-                    docker images ${BACKEND_IMAGE}
-                """
+                        customLog(
+                            'Scanning frontend image...'
+                        )
+
+                        bat """
+                            trivy image ^
+                                --severity HIGH,CRITICAL ^
+                                --format table ^
+                                ${FRONTEND_IMAGE}:${IMAGE_TAG}
+
+                            if %ERRORLEVEL% NEQ 0 (
+                                echo Frontend Trivy scan failed.
+                                exit /b %ERRORLEVEL%
+                            )
+                        """
+                    }
+                }
+
+
+                stage('Backend Trivy Scan') {
+
+                    steps {
+
+                        customLog(
+                            'Scanning backend image...'
+                        )
+
+                        bat """
+                            trivy image ^
+                                --severity HIGH,CRITICAL ^
+                                --format table ^
+                                ${BACKEND_IMAGE}:${IMAGE_TAG}
+
+                            if %ERRORLEVEL% NEQ 0 (
+                                echo Backend Trivy scan failed.
+                                exit /b %ERRORLEVEL%
+                            )
+                        """
+                    }
+                }
             }
         }
 
 
-        // ============================================================
-        // 13. TRIVY SCAN - FRONTEND
-        // ============================================================
+        // ========================================================
+        // 11. DOCKER LOGIN
+        // ========================================================
 
-        stage('Trivy Scan - Frontend') {
-
-            steps {
-
-                echo '========================================'
-                echo 'Scanning Frontend Docker Image'
-                echo '========================================'
-
-                bat """
-                    trivy image ^
-                        --severity ${TRIVY_SEVERITY} ^
-                        --exit-code 0 ^
-                        ${FRONTEND_IMAGE}:${IMAGE_TAG}
-                """
-            }
-        }
-
-
-        // ============================================================
-        // 14. TRIVY SCAN - BACKEND
-        // ============================================================
-
-        stage('Trivy Scan - Backend') {
+        stage('🔐 Docker Login') {
 
             steps {
 
-                echo '========================================'
-                echo 'Scanning Backend Docker Image'
-                echo '========================================'
-
-                bat """
-                    trivy image ^
-                        --severity ${TRIVY_SEVERITY} ^
-                        --exit-code 0 ^
-                        ${BACKEND_IMAGE}:${IMAGE_TAG}
-                """
-            }
-        }
-
-
-        // ============================================================
-        // 15. DOCKER LOGIN
-        // ============================================================
-
-        stage('Docker Login') {
-
-            steps {
-
-                echo '========================================'
-                echo 'Logging into Docker Hub'
-                echo '========================================'
+                customLog(
+                    'Logging into Docker Hub...'
+                )
 
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'dockerhub-credentials',
                         usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASSWORD'
+                        passwordVariable: 'DOCKER_PASS'
                     )
                 ]) {
 
                     bat '''
-                        echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USER% --password-stdin
+                        docker login ^
+                            -u "%DOCKER_USER%" ^
+                            -p "%DOCKER_PASS%"
 
                         if %ERRORLEVEL% NEQ 0 (
                             echo Docker login failed.
@@ -594,171 +585,111 @@ pipeline {
         }
 
 
-        // ============================================================
-        // 16. PUSH FRONTEND IMAGE
-        // ============================================================
+        // ========================================================
+        // 12. PUSH IMAGES
+        // ========================================================
 
-        stage('Push Frontend Image') {
+        stage('📤 Push Docker Images') {
 
-            steps {
+            parallel {
 
-                echo '========================================'
-                echo 'Pushing Frontend Docker Image'
-                echo '========================================'
+                stage('Push Frontend') {
 
-                bat """
-                    docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                    steps {
 
-                    if %ERRORLEVEL% NEQ 0 (
-                        exit /b %ERRORLEVEL%
-                    )
+                        customLog(
+                            'Pushing frontend image...'
+                        )
 
-                    docker push ${FRONTEND_IMAGE}:latest
-                """
-            }
-        }
+                        bat """
+                            docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
 
+                            if %ERRORLEVEL% NEQ 0 (
+                                exit /b %ERRORLEVEL%
+                            }
 
-        // ============================================================
-        // 17. PUSH BACKEND IMAGE
-        // ============================================================
-
-        stage('Push Backend Image') {
-
-            steps {
-
-                echo '========================================'
-                echo 'Pushing Backend Docker Image'
-                echo '========================================'
-
-                bat """
-                    docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
-
-                    if %ERRORLEVEL% NEQ 0 (
-                        exit /b %ERRORLEVEL%
-                    )
-
-                    docker push ${BACKEND_IMAGE}:latest
-                """
-            }
-        }
+                            docker push ${FRONTEND_IMAGE}:latest
+                        """
+                    }
+                }
 
 
-        // ============================================================
-        // 18. DOCKER IMAGE SUMMARY
-        // ============================================================
+                stage('Push Backend') {
 
-        stage('Docker Image Summary') {
+                    steps {
 
-            steps {
+                        customLog(
+                            'Pushing backend image...'
+                        )
 
-                echo '========================================'
-                echo 'Docker Image Summary'
-                echo '========================================'
+                        bat """
+                            docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
 
-                bat """
-                    echo.
-                    echo ========================================
-                    echo FRONTEND IMAGE
-                    echo ========================================
+                            if %ERRORLEVEL% NEQ 0 (
+                                exit /b %ERRORLEVEL%
+                            }
 
-                    echo ${FRONTEND_IMAGE}:${IMAGE_TAG}
-
-                    docker image inspect ${FRONTEND_IMAGE}:${IMAGE_TAG} --format="{{.Id}}"
-
-                    echo.
-                    echo ========================================
-                    echo BACKEND IMAGE
-                    echo ========================================
-
-                    echo ${BACKEND_IMAGE}:${IMAGE_TAG}
-
-                    docker image inspect ${BACKEND_IMAGE}:${IMAGE_TAG} --format="{{.Id}}"
-
-                    echo.
-                    echo ========================================
-                    echo BUILD NUMBER
-                    echo ========================================
-
-                    echo ${BUILD_NUMBER}
-
-                    echo.
-                    echo ========================================
-                    echo IMAGE TAG
-                    echo ========================================
-
-                    echo ${IMAGE_TAG}
-                """
+                            docker push ${BACKEND_IMAGE}:latest
+                        """
+                    }
+                }
             }
         }
     }
 
 
-    // ================================================================
-    // POST ACTIONS
-    // ================================================================
+    // ============================================================
+    // POST
+    // ============================================================
 
     post {
 
-        always {
-
-            echo '========================================'
-            echo 'Cleaning Sensitive Files'
-            echo '========================================'
-
-            bat '''
-                if exist "BlogApplication\\.env" (
-                    del /F /Q "BlogApplication\\.env"
-                )
-
-                if exist "frontend\\.env" (
-                    del /F /Q "frontend\\.env"
-                )
-            '''
-
-            echo 'Pipeline execution completed.'
-        }
-
-
         success {
 
-            echo '''
+            customLog(
+                '🎉 Pipeline completed successfully!'
+            )
+
+            echo """
             ========================================
             PIPELINE SUCCESS
             ========================================
-            '''
 
-            echo "Application : ${APP_NAME}"
-            echo "Version     : ${APP_VERSION}"
-            echo "Build       : ${BUILD_NUMBER}"
+            Application : ${APP_NAME}
+            Version     : ${APP_VERSION}
 
-            echo "Frontend    : ${FRONTEND_IMAGE}:${IMAGE_TAG}"
-            echo "Backend     : ${BACKEND_IMAGE}:${IMAGE_TAG}"
+            Frontend:
+            ${FRONTEND_IMAGE}:${IMAGE_TAG}
+
+            Backend:
+            ${BACKEND_IMAGE}:${IMAGE_TAG}
+
+            ========================================
+            """
         }
 
 
         failure {
 
-            echo '''
+            customLog(
+                '❌ Pipeline failed!'
+            )
+
+            echo """
             ========================================
             PIPELINE FAILED
             ========================================
-            '''
-
-            echo "Build Number: ${BUILD_NUMBER}"
-            echo "Check Jenkins Console Output."
+            Check the failed stage.
+            ========================================
+            """
         }
 
 
-        unstable {
+        always {
 
-            echo '''
-            ========================================
-            PIPELINE UNSTABLE
-            ========================================
-            '''
-
-            echo "Build Number: ${BUILD_NUMBER}"
+            customLog(
+                'Pipeline execution completed.'
+            )
         }
     }
 }
