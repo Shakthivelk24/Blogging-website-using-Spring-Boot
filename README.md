@@ -588,7 +588,7 @@ server.port=8083
 ## 1. Clone Repository
 
 ```bash
-git clone https://github.com/your-username/SparkNote.git
+git clone https://github.com/Shakthivelk24/Blogging-website-using-Spring-Boot.git
 ```
 
 ```bash
