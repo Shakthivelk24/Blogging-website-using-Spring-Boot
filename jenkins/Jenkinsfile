@@ -1,6 +1,9 @@
 @Library('Shared') _
 
 pipeline {
+    // ============================================================
+    // AGENT
+    // ============================================================
 
     agent {
         label 'shakthiAgent'
@@ -11,33 +14,47 @@ pipeline {
     // ============================================================
 
     environment {
-
+        // --------------------------------------------------------
         // Application
+        // --------------------------------------------------------
+
         APP_NAME = 'sparkNote'
         APP_VERSION = "1.0.${BUILD_NUMBER}"
 
+        // --------------------------------------------------------
         // Docker
+        // --------------------------------------------------------
+
         DOCKER_USERNAME = 'shakthivelk24'
 
-        FRONTEND_IMAGE = "${DOCKER_USERNAME}/sparknote-frontend"
-        BACKEND_IMAGE  = "${DOCKER_USERNAME}/sparknote-backend"
+        FRONTEND_IMAGE =
+            "${DOCKER_USERNAME}/sparknote-frontend"
 
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        BACKEND_IMAGE =
+            "${DOCKER_USERNAME}/sparknote-backend"
 
+        IMAGE_TAG =
+            "${BUILD_NUMBER}"
+
+        // --------------------------------------------------------
         // SonarQube
-        SONAR_PROJECT_KEY  = 'sparkNote'
-        SONAR_PROJECT_NAME = 'sparkNote'
+        // --------------------------------------------------------
 
+        SONAR_PROJECT_KEY = 'sparkNote'
+
+        // --------------------------------------------------------
         // Trivy
-        TRIVY_REPORT_DIR = 'reports/trivy'
+        // --------------------------------------------------------
+
+        TRIVY_REPORT_DIR =
+            'reports/trivy'
     }
 
     // ============================================================
-    // OPTIONS
+    // PIPELINE OPTIONS
     // ============================================================
 
     options {
-
         timestamps()
 
         ansiColor('xterm')
@@ -63,13 +80,11 @@ pipeline {
     stages {
 
         // ========================================================
-        // 1. CHECK TOOLS
+        // STAGE 1: CHECK TOOLS
         // ========================================================
 
         stage('🔧 Check Tools') {
-
             steps {
-
                 cleanWs()
 
                 customLog(
@@ -81,43 +96,48 @@ pipeline {
         }
 
         // ========================================================
-        // 2. CHECKOUT
+        // STAGE 2: CHECKOUT
         // ========================================================
 
         stage('🔄 Checkout') {
-
             steps {
-
                 customLog(
                     'Checking out source code...'
                 )
 
                 checkout scm
 
-                bat '''
-                    echo ========================================
-                    echo Git Information
-                    echo ========================================
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            echo "========== Last 5 Commits =========="
 
-                    git --version
+                            git log --oneline -5
 
-                    echo.
-                    echo Last 5 Commits
-                    git log --oneline -5
+                            echo "========== Git Status =========="
 
-                    echo.
-                    echo Git Status
-                    git status
-                '''
+                            git status
+                        '''
+                    } else {
+                        bat '''
+                            echo ========== Last 5 Commits ==========
+
+                            git log --oneline -5
+
+                            echo ========== Git Status ==========
+
+                            git status
+                        '''
+                    }
+                }
             }
         }
 
         // ========================================================
-        // 3. INSTALL DEPENDENCIES
+        // STAGE 3: INSTALL DEPENDENCIES
         // ========================================================
 
         stage('📦 Install Dependencies') {
-
             parallel {
 
                 // ------------------------------------------------
@@ -125,14 +145,14 @@ pipeline {
                 // ------------------------------------------------
 
                 stage('Frontend Dependencies') {
-
                     steps {
-
                         customLog(
-                            'Installing frontend dependencies...'
+                            'Installing React dependencies...'
                         )
 
-                        npmInstall('frontend')
+                        npmInstall(
+                            'frontend'
+                        )
                     }
                 }
 
@@ -141,22 +161,23 @@ pipeline {
                 // ------------------------------------------------
 
                 stage('Backend Dependencies') {
-
                     steps {
-
                         dir('BlogApplication') {
-
                             customLog(
                                 'Installing Spring Boot dependencies...'
                             )
 
-                            bat '''
-                                echo ========================================
-                                echo Maven Dependency Check
-                                echo ========================================
-
-                                mvn dependency:go-offline
-                            '''
+                            script {
+                                if (isUnix()) {
+                                    sh '''
+                                        mvn dependency:go-offline
+                                    '''
+                                } else {
+                                    bat '''
+                                        mvn dependency:go-offline
+                                    '''
+                                }
+                            }
                         }
                     }
                 }
@@ -164,269 +185,141 @@ pipeline {
         }
 
         // ========================================================
-        // 4. FRONTEND TESTS + COVERAGE
+        // STAGE 4: RUN TESTS
         // ========================================================
 
-        stage('🧪 Frontend Tests & Coverage') {
+        stage('🧪 Run Tests') {
+            parallel {
 
-            steps {
+                // ------------------------------------------------
+                // FRONTEND TESTS
+                // ------------------------------------------------
 
-                dir('frontend') {
-
-                    customLog(
-                        'Running React tests with coverage...'
-                    )
-
-                    bat '''
-                        echo ========================================
-                        echo Frontend Tests
-                        echo ========================================
-
-                        npm run coverage
-                    '''
-
-                    script {
-
-                        if (fileExists('coverage/lcov.info')) {
-
-                            echo '''
-                            ====================
-                            Coverage report found:
-                            coverage/lcov.info
-                            ====================
-                            '''
-
-                        } else {
-
-                            error(
-                                'Frontend coverage file was not generated.'
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // ========================================================
-        // 5. FRONTEND BUILD
-        // ========================================================
-
-        stage('🏗️ Frontend Build') {
-
-            steps {
-
-                customLog(
-                    'Building React application...'
-                )
-
-                dir('frontend') {
-
-                    bat '''
-                        echo ========================================
-                        echo React Production Build
-                        echo ========================================
-
-                        npm run build
-                    '''
-                }
-            }
-        }
-
-        // ========================================================
-        // 6. BACKEND TEST + BUILD
-        // ========================================================
-
-        stage('🧪 Backend Test & Build') {
-
-            steps {
-
-                customLog(
-                    'Running Spring Boot tests and build...'
-                )
-
-                dir('BlogApplication') {
-
-                    withCredentials([
-                        file(
-                            credentialsId: 'blogapplication-env',
-                            variable: 'ENV_FILE'
+                stage('Frontend Tests') {
+                    steps {
+                        customLog(
+                            'Running React tests with coverage...'
                         )
-                    ]) {
 
-                        bat '''
-                            echo ========================================
-                            echo Creating .env
-                            echo ========================================
+                        npmTest(
+                            'frontend',
+                            'vitest',
+                            'coverage',
+                            'junit.xml'
+                        )
+                    }
+                }
 
-                            copy /Y "%ENV_FILE%" ".env"
+                // ------------------------------------------------
+                // SPRING BOOT TESTS
+                // ------------------------------------------------
 
-                            if %ERRORLEVEL% NEQ 0 (
-                                echo Failed to create .env
-                                exit /b 1
-                            )
+                stage('Backend Tests') {
+                    steps {
+                        dir('BlogApplication') {
+                            withCredentials([
 
-                            echo.
-                            echo ========================================
-                            echo Maven Clean
-                            echo ========================================
+                                file(
+                                    credentialsId:
+                                        'blogapplication-env',
 
-                            mvn clean
+                                    variable:
+                                        'ENV_FILE'
+                                )
 
-                            echo.
-                            echo ========================================
-                            echo Maven Test + Package
-                            echo ========================================
+                            ]) {
+                                script {
+                                    if (isUnix()) {
+                                        sh '''
+                                            echo "Creating Spring Boot .env file..."
 
-                            mvn test package
+                                            cp "$ENV_FILE" .env
 
-                            if %ERRORLEVEL% NEQ 0 (
-                                echo Backend tests/build failed
-                                exit /b 1
-                            )
+                                            echo "Running Spring Boot tests..."
 
-                            echo.
-                            echo ========================================
-                            echo Backend Build Completed
-                            echo ========================================
+                                            mvn clean test
+                                        '''
+                                    } else {
+                                        bat '''
+                                            echo Creating Spring Boot .env file...
 
-                            if not exist "target\\classes" (
-                                echo ERROR: target/classes was not created.
-                                exit /b 1
-                            )
+                                            copy /Y "%ENV_FILE%" .env
 
-                            echo Java classes found:
-                            dir "target\\classes"
-                        '''
+                                            echo Running Spring Boot tests...
+
+                                            mvn clean test
+                                        '''
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
         // ========================================================
-        // 7. SONARQUBE ANALYSIS
+        // STAGE 5: STATIC CODE ANALYSIS
         // ========================================================
 
-        stage('🔍 SonarQube Analysis') {
+       // ========================================================
+// STAGE 5: STATIC CODE ANALYSIS
+// ========================================================
 
+        stage('🔍 Static Code Analysis') {
             steps {
-
                 customLog(
-                    'Running SonarQube analysis...'
-                )
+            'Running SonarQube analysis for React + Spring Boot...'
+        )
 
                 script {
-
                     def scannerHome =
-                        tool 'SonarScanner'
+                tool 'SonarScanner'
 
                     withSonarQubeEnv('SonarQube') {
-
-                        bat """
-                            echo ========================================
-                            echo SonarQube Analysis
-                            echo ========================================
-
-                            echo Scanner:
-                            echo ${scannerHome}
-
-                            echo.
-                            echo Project:
-                            echo ${SONAR_PROJECT_NAME}
-
-                            echo.
-                            echo Java binaries:
-                            echo BlogApplication/target/classes
-
-                            echo.
-                            echo React coverage:
-                            echo frontend/coverage/lcov.info
-
-                            echo.
-                            echo ========================================
-                            echo Running Scanner
-                            echo ========================================
-
-                            "${scannerHome}\\\\bin\\\\sonar-scanner.bat" ^
-                                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" ^
-                                -Dsonar.projectName="${SONAR_PROJECT_NAME}" ^
-                                -Dsonar.projectVersion="${APP_VERSION}" ^
-                                -Dsonar.sources="frontend/src,BlogApplication/src" ^
-                                -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/src/test/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx" ^
-                                -Dsonar.java.binaries="BlogApplication/target/classes" ^
-                                -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" ^
-                                -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" ^
-                                -Dsonar.scanner.skipSystemTruststore=true
-                        """
+                        if (isUnix()) {
+                            sh """
+                        "${scannerHome}/bin/sonar-scanner" \
+                        -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+                        -Dsonar.projectName="${APP_NAME}" \
+                        -Dsonar.projectVersion="${APP_VERSION}" \
+                        -Dsonar.sources="frontend/src,BlogApplication/src" \
+                        -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx,**/src/test/**" \
+                        -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" \
+                        -Dsonar.java.binaries="BlogApplication/target/classes" \
+                        -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" \
+                        -Dsonar.verbose=true
+                    """
+                } else {
+                            bat """
+                        "${scannerHome}\\bin\\sonar-scanner.bat" ^
+                        -Dsonar.projectKey="${SONAR_PROJECT_KEY}" ^
+                        -Dsonar.projectName="${APP_NAME}" ^
+                        -Dsonar.projectVersion="${APP_VERSION}" ^
+                        -Dsonar.sources="frontend/src,BlogApplication/src" ^
+                        -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/lcov-report/**,**/target/**,**/*.test.js,**/*.test.jsx,**/*.spec.js,**/*.spec.jsx,**/src/test/**" ^
+                        -Dsonar.javascript.lcov.reportPaths="frontend/coverage/lcov.info" ^
+                        -Dsonar.java.binaries="BlogApplication/target/classes" ^
+                        -Dsonar.coverage.jacoco.xmlReportPaths="BlogApplication/target/site/jacoco/jacoco.xml" ^
+                        -Dsonar.verbose=true
+                    """
+                        }
                     }
                 }
             }
         }
 
         // ========================================================
-        // 8. QUALITY GATE
+        // STAGE 6: QUALITY GATE
         // ========================================================
 
         stage('✅ Quality Gate') {
-
             steps {
-
                 customLog(
                     'Waiting for SonarQube quality gate result...'
                 )
 
-                timeout(
-                    time: 10,
-                    unit: 'MINUTES'
-                ) {
-
-                    waitForQualityGate(
-                        abortPipeline: true
-                    )
-                }
-            }
-        }
-
-        // ========================================================
-        // 9. VERIFY BUILD OUTPUTS
-        // ========================================================
-
-        stage('🔎 Verify Build Outputs') {
-
-            steps {
-
-                customLog(
-                    'Verifying generated application artifacts...'
-                )
-
-                bat '''
-                    echo ========================================
-                    echo Frontend Build
-                    echo ========================================
-
-                    if not exist "frontend\\dist" (
-                        echo ERROR: Frontend dist folder not found.
-                        exit /b 1
-                    )
-
-                    dir "frontend\\dist"
-
-                    echo.
-                    echo ========================================
-                    echo Backend Build
-                    echo ========================================
-
-                    if not exist "BlogApplication\\target" (
-                        echo ERROR: Backend target folder not found.
-                        exit /b 1
-                    )
-
-                    dir "BlogApplication\\target"
-
-                    echo.
-                    echo ========================================
-                    echo Build Verification Successful
-                    echo ========================================
-                '''
+                qualityGate()
             }
         }
     }
@@ -436,36 +329,22 @@ pipeline {
     // ============================================================
 
     post {
-
         success {
-
             customLog(
-                '🎉 Pipeline completed successfully!'
+                '🎉 React + Spring Boot pipeline completed successfully!'
             )
         }
 
         failure {
-
             customLog(
                 '❌ Pipeline failed!'
             )
         }
 
         always {
-
             customLog(
                 'Pipeline execution completed.'
             )
-
-            // Remove generated .env file
-            // so secrets are not left inside workspace.
-
-            bat '''
-                if exist "BlogApplication\\.env" (
-                    del /F /Q "BlogApplication\\.env"
-                    echo .env removed from workspace.
-                )
-            '''
         }
     }
 }
