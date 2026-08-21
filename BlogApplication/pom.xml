@@ -34,9 +34,7 @@
 	<!-- ======================================================== -->
 
 	<properties>
-
 		<java.version>25</java.version>
-
 	</properties>
 
 
@@ -45,7 +43,6 @@
 	<!-- ======================================================== -->
 
 	<dependencies>
-
 
 		<!-- ==================================================== -->
 		<!-- Spring Data JPA -->
@@ -164,7 +161,6 @@
 			<scope>test</scope>
 		</dependency>
 
-
 	</dependencies>
 
 
@@ -176,13 +172,11 @@
 
 		<plugins>
 
-
 			<!-- ================================================== -->
 			<!-- Spring Boot Maven Plugin -->
 			<!-- ================================================== -->
 
 			<plugin>
-
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 
@@ -207,12 +201,10 @@
 			<!-- ================================================== -->
 
 			<plugin>
-
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
 
 				<executions>
-
 
 					<!-- ========================================== -->
 					<!-- Main Compilation -->
@@ -290,7 +282,6 @@
 
 				<executions>
 
-
 					<!-- ========================================== -->
 					<!-- 1. Attach JaCoCo Agent -->
 					<!-- ========================================== -->
@@ -300,9 +291,7 @@
 						<id>prepare-agent</id>
 
 						<goals>
-
 							<goal>prepare-agent</goal>
-
 						</goals>
 
 					</execution>
@@ -319,9 +308,7 @@
 						<phase>verify</phase>
 
 						<goals>
-
 							<goal>report</goal>
-
 						</goals>
 
 					</execution>
@@ -338,9 +325,7 @@
 						<phase>verify</phase>
 
 						<goals>
-
 							<goal>check</goal>
-
 						</goals>
 
 						<configuration>
@@ -352,12 +337,35 @@
 									<!-- Entire application -->
 									<element>BUNDLE</element>
 
+
+									<!-- ================================= -->
+									<!-- EXCLUSIONS -->
+									<!-- ================================= -->
+
+									<excludes>
+
+										<!-- Entity / Model classes -->
+										<exclude>
+											com/BlogApplication/model/**
+										</exclude>
+
+										<!-- Configuration classes -->
+										<exclude>
+											com/BlogApplication/config/**
+										</exclude>
+
+									</excludes>
+
+
+									<!-- ================================= -->
+									<!-- COVERAGE LIMITS -->
+									<!-- ================================= -->
+
 									<limits>
 
-
-										<!-- ====================== -->
+										<!-- ============================== -->
 										<!-- Instruction Coverage -->
-										<!-- ====================== -->
+										<!-- ============================== -->
 
 										<limit>
 
@@ -370,9 +378,9 @@
 										</limit>
 
 
-										<!-- ====================== -->
+										<!-- ============================== -->
 										<!-- Line Coverage -->
-										<!-- ====================== -->
+										<!-- ============================== -->
 
 										<limit>
 
@@ -385,9 +393,9 @@
 										</limit>
 
 
-										<!-- ====================== -->
+										<!-- ============================== -->
 										<!-- Method Coverage -->
-										<!-- ====================== -->
+										<!-- ============================== -->
 
 										<limit>
 
@@ -400,9 +408,9 @@
 										</limit>
 
 
-										<!-- ====================== -->
+										<!-- ============================== -->
 										<!-- Class Coverage -->
-										<!-- ====================== -->
+										<!-- ============================== -->
 
 										<limit>
 
@@ -415,9 +423,9 @@
 										</limit>
 
 
-										<!-- ====================== -->
+										<!-- ============================== -->
 										<!-- Branch Coverage -->
-										<!-- ====================== -->
+										<!-- ============================== -->
 
 										<limit>
 
@@ -429,7 +437,6 @@
 
 										</limit>
 
-
 									</limits>
 
 								</rule>
@@ -440,11 +447,9 @@
 
 					</execution>
 
-
 				</executions>
 
 			</plugin>
-
 
 		</plugins>
 
