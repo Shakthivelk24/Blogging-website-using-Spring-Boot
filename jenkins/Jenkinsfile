@@ -185,96 +185,87 @@ pipeline {
 
         stage('🧪 Run Tests') {
 
-            parallel {
+            steps {
 
-                // ------------------------------------------------
+                // ==================================================
                 // FRONTEND TESTS
-                // ------------------------------------------------
+                // ==================================================
 
-                stage('Frontend Tests') {
+                script {
 
-                    steps {
+                    customLog(
+                        'Running React tests with coverage...'
+                    )
 
-                        customLog(
-                            'Running React tests with coverage...'
-                        )
-
-                        npmTest(
-                            'frontend',
-                            'vitest',
-                            'coverage',
-                            'junit.xml'
-                        )
-                    }
+                    npmTest(
+                        'frontend',
+                        'vitest',
+                        'coverage',
+                        'junit.xml'
+                    )
                 }
 
 
-                // ------------------------------------------------
+                // ==================================================
                 // BACKEND TESTS
-                // ------------------------------------------------
+                // ==================================================
 
-                stage('Backend Tests') {
+                dir('BlogApplication') {
 
-                    steps {
+                    customLog(
+                        'Running Spring Boot tests with JaCoCo coverage...'
+                    )
 
-                        dir('BlogApplication') {
+                    withCredentials([
+                        file(
+                            credentialsId: 'blogapplication-env',
+                            variable: 'ENV_FILE'
+                        )
+                    ]) {
 
-                            customLog(
-                                'Running Spring Boot tests with JaCoCo coverage...'
+                        bat '''
+                            echo ========================================
+                            echo Creating .env
+                            echo ========================================
+
+                            copy /Y "%ENV_FILE%" ".env"
+
+                            echo.
+                            echo ========================================
+                            echo Running Maven tests
+                            echo ========================================
+
+                            mvn clean verify
+
+                            echo.
+                            echo ========================================
+                            echo Checking compiled classes
+                            echo ========================================
+
+                            if not exist "target\\classes" (
+                                echo ERROR: target\\classes was NOT created
+                                exit /b 1
                             )
 
-                            withCredentials([
-                                file(
-                                    credentialsId: 'blogapplication-env',
-                                    variable: 'ENV_FILE'
-                                )
-                            ]) {
+                            echo [OK] target\\classes exists
 
-                                bat '''
-                                    echo ========================================
-                                    echo Creating .env
-                                    echo ========================================
+                            echo.
+                            echo ========================================
+                            echo Checking JaCoCo report
+                            echo ========================================
 
-                                    copy /Y "%ENV_FILE%" ".env"
+                            if not exist "target\\site\\jacoco\\jacoco.xml" (
+                                echo ERROR: JaCoCo XML report was NOT created
+                                exit /b 1
+                            )
 
-                                    echo.
-                                    echo ========================================
-                                    echo Running Maven tests
-                                    echo ========================================
+                            echo [OK] JaCoCo XML report exists
 
-                                    mvn clean verify
-
-                                    echo.
-                                    echo ========================================
-                                    echo Checking compiled classes
-                                    echo ========================================
-
-                                    if not exist "target\\classes" (
-                                        echo ERROR: target\\classes was NOT created
-                                        exit /b 1
-                                    )
-
-                                    echo [OK] target\\classes exists
-
-                                    echo.
-                                    echo ========================================
-                                    echo Checking JaCoCo report
-                                    echo ========================================
-
-                                    if not exist "target\\site\\jacoco\\jacoco.xml" (
-                                        echo ERROR: JaCoCo XML report was NOT created
-                                        exit /b 1
-                                    )
-
-                                    echo [OK] JaCoCo XML report exists
-
-                                    echo.
-                                    echo ========================================
-                                    echo Backend tests completed successfully
-                                    echo ========================================
-                                '''
-                            }
-                        }
+                            echo.
+                            echo ========================================
+                            echo Backend tests completed successfully
+                            echo ========================================
+                        '''
                     }
                 }
             }
@@ -282,7 +273,7 @@ pipeline {
 
 
         // ========================================================
-        // 5. VERIFY COVERAGE FILES
+        // 5. VERIFY SONARQUBE INPUTS
         // ========================================================
 
         stage('🔎 Verify SonarQube Inputs') {
@@ -388,6 +379,21 @@ pipeline {
                     withSonarQubeEnv('SonarQube') {
 
                         bat """
+                            echo ========================================
+                            echo SONARQUBE ANALYSIS
+                            echo ========================================
+
+                            echo.
+                            echo Scanner:
+                            echo ${scannerHome}
+
+                            echo.
+                            echo Project:
+                            echo ${SONAR_PROJECT_KEY}
+
+                            echo.
+                            echo ========================================
+
                             "${scannerHome}\\bin\\sonar-scanner.bat" ^
                             -Dsonar.projectKey="${SONAR_PROJECT_KEY}" ^
                             -Dsonar.projectName="${APP_NAME}" ^
